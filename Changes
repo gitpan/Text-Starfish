@@ -4,3 +4,17 @@ Revision history for Perl extension Text::Starfish.
 	- original version; created by h2xs 1.21 with options
 		-X -n Text::Starfish
 
+0.05  Tue Mar 29 09:44:42 AST 2005
+	- removed <? ... ?> from html
+	- add .html.sfish to html extensions
+	- removed some bugs in testing
+	- function read_records added
+	- changing die to croak
+	- read_record, line continuation changed: \ \n leaves \n
+	  embedded in string, \n[ \t] is removed from string
+	- minor modifications (allow no \n at the end for read_record)
+	- consider wantarray in read_records
+	- minor bugs
+	- read_starfish_conf executes each starfish.conf in the
+	  approapriate directory
+	- documentation improvement

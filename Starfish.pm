@@ -1,59 +1,33 @@
-# (c) 2001-2003 Vlado Keselj www.cs.dal.ca/~vlado
+# (c) 2001-2005 Vlado Keselj www.cs.dal.ca/~vlado
 #
-# starfish and Starfish.pm - yet another embedded Perl
-# (see the documentation following the code (or use:
-# perldoc starfish, or something similar))
+# Starfish.pm and starfish - a Perl-based System for Text-Embedded
+#     Programming and Preprocessing
+#
+# See the documentation following the code.  You can also use the
+# command "perldoc Starfish.pm".
 
 package Text::Starfish;
 use strict;
+use Carp;
+use Cwd;
+
 require Exporter;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
 our @ISA = qw(Exporter);
 
 our %EXPORT_TAGS = ( 'all' => [ qw() ] );
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-our @EXPORT = qw(echo file_modification_date read_starfish_conf);
-our $VERSION = '0.04';
+our @EXPORT = qw(echo file_modification_date file_modification_time read_starfish_conf);
+our $VERSION = '0.05';
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 3.9 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.23 $, 10)) =~ s/\s+$//;
 
 use vars @EXPORT_OK;
 
 # non-exported package globals go here
-use vars qw($Sfish_conf_dir);
-
-# initialize package globals, first exported ones
-#$Var1   = '';
-#%Hashit = ();
-
-# then the others (which are still accessible as $Some::Module::stuff)
-#$stuff  = '';
-#@more   = ();
-
-#             # all file-scoped lexicals must be created before
-#             # the functions below that use them.
-#             # file-private lexicals go here
-#             my $priv_var    = '';
-#             my %secret_hash = ();
-
-#             # here's a file-private function as a closure,
-#             # callable as &$priv_func;  it cannot be prototyped.
-#             my $priv_func = sub {
-#                 # stuff goes here.
-#             };
-
-#             # make all your functions, whether exported or not;
-#             # remember to put something interesting in the {} stubs
-#             sub func1      {}    # no prototype
-#             sub func2()    {}    # proto'd void
-#             sub func3($$)  {}    # proto'd to 2 scalars
-
-#             # this one isn't exported, but could be called!
-#             sub func4(\%)  {}    # proto'd to 1 hash ref
-
-#             END { }       # module clean-up code here (global destructor)
+use vars qw();
 
 # exported stuff (this should be handled by Exporter, but for some reason
 # it does not work as it should.
@@ -64,6 +38,7 @@ sub appendfile($@); sub main::appendfile($@); *::appendfile = \&appendfile;
 sub getmakefilelist($$); sub main::getmakefilelist($$);
                                      *::getmakefilelist = \&getmakefilelist;
 sub htmlquote($);   sub main::htmlquote($);   *::htmlquote = \&htmlquote;
+sub read_records($); sub main::read_records($); *::read_records = \&read_records;
 
 sub new {
     my $proto = shift;
@@ -112,11 +87,13 @@ sub run {
 
 	$self->{CurrentLoop} = 1;
 	if (!defined $self->{STYLE}) {
-	    if    ($InFile =~ /\.html?/i)       { $self->setStyle('html') }
-	    elsif ($InFile =~ /\.(?:la)?tex$/i) { $self->setStyle('tex') }
-	    elsif ($InFile =~ /\.java$/i)       { $self->setStyle('java') }
-	    elsif ($InFile =~ /^[Mm]akefile/)   { $self->setStyle('makefile') }
-	    elsif ($InFile =~ /\.ps$/i)         { $self->setStyle('ps') }
+	    my $f = $InFile;
+	    $f =~ s/\.s(tar)?fish$//;
+	    if    ($f =~ /\.html?/i)       { $self->setStyle('html') }
+	    elsif ($f =~ /\.(?:la)?tex$/i) { $self->setStyle('tex') }
+	    elsif ($f =~ /\.java$/i)       { $self->setStyle('java') }
+	    elsif ($f =~ /^[Mm]akefile/)   { $self->setStyle('makefile') }
+	    elsif ($f =~ /\.ps$/i)         { $self->setStyle('ps') }
 	    else { $self->setStyle('perl') }
 	} else { $self->setStyle($self->{STYLE}) }
 
@@ -219,7 +196,7 @@ sub scan {
     }
 
     $self->{prefix} = $self->{suffix} = '';
-    if ($self->{data} eq '') {
+    if ($self->{data} eq '') {	# no more data, EOF
 	$self->{ttype} = -1;
 	$self->{currenttoken} = '';
     }
@@ -229,7 +206,7 @@ sub scan {
 	my $ttype;
 	foreach $ttype (0 .. $#{ $self->{hook} }) {
 	    my $j = index($self->{data}, $self->{hook}->[$ttype]->{'begin'});
-	    if ($j!=-1 && $j < $i) { $i = $j; $self->{ttype} = $ttype; }
+	    if ($j!=-1 && $j <= $i) { $i = $j; $self->{ttype} = $ttype; }
 	}
 
 	if ($self->{ttype}==-2) {$self->{currenttoken}=$self->{data}; $self->{data}=''}
@@ -282,7 +259,7 @@ sub evaluate {
     #
     # $self->{hook}->[0] is reserved for output pieces
     #
-    if ($::O) { $suf.="$self->{hook}->[0]->{'begin'}$::O$self->{hook}->[0]->{'end'}" }
+    if ($::O ne '') { $suf.="$self->{hook}->[0]->{'begin'}$::O$self->{hook}->[0]->{'end'}" }
     return "$pref$c$suf";
 }
 
@@ -536,21 +513,18 @@ sub setStyle {
     my $s = shift;
     if ($s eq 'latex' or $s eq 'TeX') {	$s = 'tex' }
     if ($s eq $self->{Style}) { return }
-    if ($s eq 'perl') {
-	$self->{hook}= [
-	       {begin => "\n#+\n", end=>"\n#-\n", f=>sub{return''}}, # Reserved for output
-	       {begin => '<?', end => '!>', f => \&evaluate }
-	       ];
-	$self->{CodePreparation} = 's/\\n(?:#|%|\/\/+)/\\n/g';
-    }
-    elsif ($s eq 'makefile') {
-	$self->{LineComment} = '#';
-	$self->{hook} = [
-	       {begin => "\n#+\n", end=>"\n#-\n", f=>sub{return''}}, # Reserved for output
-	       {begin => '<?', end => '!>', f => \&evaluate }
-	       ];
-	$self->{CodePreparation} = 's/\\n(?:#|%+|\/\/+)/\\n/g';
-    }
+    
+    # default
+    $self->{'LineComment'} = '#';
+    $self->{hook}= [
+      {begin => "\n#+\n", end=>"\n#-\n", f=>sub{return''}}, # Reserved for output
+      {begin => '<?', end => '!>', f => \&evaluate },
+      {begin => '<?starfish', end => '?>', f => \&evaluate }
+    ];
+    $self->{CodePreparation} = 's/\\n(?:#|%|\/\/+)/\\n/g';
+
+    if ($s eq 'perl') { }
+    elsif ($s eq 'makefile') { }
     elsif ($s eq 'java') {
 	$self->{LineComment} = '//';
 	$self->{hook} = [{begin => "//+\n", end=>"//-\n", f=>sub{return''}},  # Reserved for output
@@ -567,7 +541,10 @@ sub setStyle {
 	undef $self->{LineComment};
 	$self->{hook}=[{begin => "\n<!-- + -->\n", end=>"\n<!-- - -->\n",   # Reserved for output
 		f=>sub{return''}},
-	       {begin => '<!--<?', end => '!>-->', f => \&evaluate }];
+	       {begin => '<!--<?', end => '!>-->', f => \&evaluate },
+	       #{begin=>'<?', end=>'?>', f=>\&evaluate },
+	       {begin=>'<?starfish ', end=>'?>', f=>\&evaluate }
+        ];
 	$self->{CodePreparation} = '';
     }
     elsif ($s eq 'ps') {
@@ -708,10 +685,49 @@ sub htmlquote($) {
     return $_;
 }
 
+sub read_records($ ) {
+  my $arg = shift;
+  if ($arg =~ /^file=/) { $arg = getfile($') }
+  my $db = [];
+  while ($arg) {
+      $arg =~ s/^\s*(#.*\s*)*//;  # allow comments betwen records
+      my $record;
+      if ($arg =~ /\n\n+/) { $record = "$`\n"; $arg = $'; }
+      else { $record = $arg; $arg = ''; }
+      my $r = {};
+      while ($record) {
+        $record =~ /^([^\n:]*):/ or
+	    croak "field not properly defined in record: ($record)";
+	my $k = $1; $record = $'; my $v;
+	while (1) {		# .................... line continuation
+	    if ($record =~ /^(.*)\\(\n)/) { $v .= $1.$2; $record = $'; }
+	    elsif ($record =~ /^(.*)\n[ \t]/)
+	    { $v .= $1; $record = $'; }
+	    elsif ($record =~ /^(.*)\n/)
+	    { $v .= $1; $record = $'; last; }
+	    else { $v .= $record; $record = ''; last }
+	}
+        if (exists($r->{$k})) {
+          my $c = 0;
+          while (exists($r->{"$k-$c"})) { ++$c }
+          $k = "$k-$c";
+        }
+        $r->{$k} = $v;
+      }
+      push @{ $db }, $r;
+  }
+  return wantarray ? @{$db} : $db;
+}
+
+sub file_modification_time() {
+    my $self = @_ ? shift : $::Star;
+    return (stat $self->{INFILE})[9];
+}
+
 sub file_modification_date() {
     my $self = @_ ? shift : $::Star;
 
-    my $t = (stat $self->{INFILE})[9];
+    my $t = $self->file_modification_time();
     my @a = localtime($t); $a[5] += 1900;
     return qw/January February March April May June July
     	      August September October November December/
@@ -719,18 +735,19 @@ sub file_modification_date() {
 }
 
 sub read_starfish_conf() {
-    $Sfish_conf_dir = '.' unless $Sfish_conf_dir;
-    return unless -e "$Sfish_conf_dir/starfish.conf";
-    
-    # First read configurations up the tree
-    my $save = $Sfish_conf_dir;
-    $Sfish_conf_dir = "$save/..";
-    read_starfish_conf();
-    $Sfish_conf_dir = $save;
+    return unless -e "starfish.conf";
+    my @dirs = ( '.' );
+    while ( -e "$dirs[0]/../starfish.conf" )
+    { unshift @dirs, "$dirs[0]/.." }
 
-    package main;
-    require "$Text::Starfish::Sfish_conf_dir/starfish.conf";
-    package Text::Starfish;
+    my $currdir = cwd();
+    foreach my $d (@dirs) {
+	chdir $d or die "cannot chdir to $d";
+	package main;
+	require "$currdir/$d/starfish.conf";
+	package Text::Starfish;
+	chdir $currdir or die "cannot chdir to $currdir";
+    }
 }
 
 __END__
@@ -739,7 +756,9 @@ __END__
 
 =head1 NAME
 
-starfish, Text::Starfish.pm - Yet another embedded Perl
+Text::Starfish.pm and starfish - A Perl-based System for Text-Embedded
+      Programming and Preprocessing
+
 
 =head1 SYNOPSIS
 
@@ -753,19 +772,21 @@ C<!E<gt>>.
 
 (The documentation is probably not up to date.)
 
-This is yet another embedded Perl.  If you know Perl and php, you
-probably know what is the idea: embed Perl code inside the text,
-execute it is some way, so that the output is interleaved with the text.
-Very similar projects exist and some of them are listed in L<"SEE
-ALSO">.
+Starfish is a system for Perl-based text-embedded programming and
+preprocessing relying on a unifying regular expression rewriting
+methodology.  If you know Perl and php, you probably know the basic
+idea: embed Perl code inside the text, execute it is some way, and
+interleave the output with the text.   Very similar projects exist and
+some of them are listed in L<"SEE ALSO">.  Starfish is, however,
+unique in several ways.
 
 There are two files in this package: a module (Starfish.pm) and a
 small script (starfish) that relies on the module.
 The earlier name of this module was SLePerl (Something Like ePerl),
-but I have changed it to C<starfish> -- sounds better and easier to
-type.  I was thinking about `oyster' but some people are thinking
+but it was changed it to C<starfish> -- sounds better and easier to
+type.  One option was `oyster,' but some people are thinking
 about using it for Perl beans, and there is a (yet another) Perl
-module for embedded Perl C<Text::Oyster>, so I gave up.
+module for embedded Perl C<Text::Oyster>, so it was not used.
 
 The idea with the `C<starfish>' name is: the Perl code is embedded into
 a text, so the text is equivalent to a shellfish containing pearls.
@@ -773,16 +794,15 @@ A starfish comes by and eats the shellfish...  Unlike a natural
 starfish, this C<starfish> is interested in pearls and does not
 normally touch most of the surrounding meat.
 
-Starfish is used to embed some Perl code into arbitrary text file.
-After running the script, it will execute the Perl snippets and put
-them into the file, if an update is needed.  This is an important
-difference between C<starfish> and similar programs (e.g. php): the
-output does not necessarily replace the code, it follows the code by
-default.
 
-To produce output to be inserted into the file, use variable $O.
+An important difference between C<starfish> and similar programs
+(e.g. php) is: the output does not necessarily replace the code, it
+follows the code by default.
 
-Some functions can be added to script to be used in text.
+To produce output to be inserted into the file, use variable C<$O> or
+function C<echo>.
+
+=head1 EXAMPLES
 
 =head2 A simple example
 
@@ -1044,13 +1064,22 @@ output file in order to write to that file, if needed.
 
 =back
 
-=head1 VARIABLES
+=head1 PREDEFINED VARIABLES
 
 =over 5
 
+=item C<$O>
+
+After executing a snippet, the contents of this variable are inserted
+into the file.
+
+=item $Star
+
+The Starfish object processing this file (this).
+
 =item $Star->{INFILE}
 
-name of the current input file
+Name of the current input file.
 
 =back
 
@@ -1058,9 +1087,21 @@ name of the current input file
 
 =over 5
 
+=item B<appendfile> I<filename>, I<list>
+
+appends list elements to the file.
+
 =item B<echo>
 
 appends stuff to the special variable $O.
+
+=item B<file_modification_time>
+
+Returns modification time of this file (in format of Perl time).
+
+=item B<file_modification_date>
+
+Returns modification date of this file (in format: Month DD, YYYY).
 
 =item B<getfile> I<file>
 
@@ -1078,15 +1119,6 @@ I<var>; e.g.,
 
 Embedded variables are not handled.
 
-=item B<putfile> I<filename>, I<list>
-
-opens file, writes the list elements to the file, and closes it.
-`C<putfile> I<filename>' "touches" the file.
-
-=item B<appendfile> I<filename>, I<list>
-
-appends stuff to the file.
-
 =item B<htmlquote> I<string>
 
 The following definition is taken from the CIPP project
@@ -1100,14 +1132,39 @@ clashes. The following conversions are done in this order:
        <  =>  &lt;
        "  =>  &quot;
 
-=item B<file_modification_date>
+=item B<putfile> I<filename>, I<list>
 
-Returns modification date of this file.
+opens file, writes the list elements to the file, and closes it.
+`C<putfile> I<filename>' "touches" the file.
+
+=item B<read_records> I<string>
+
+The function takes one string argument.  If it starts with 'file='
+then the rest of the string is treated as a file name, which contents
+replaces the string in further processing.  The string is translated
+into a list of records (hashes) and a reference to the list is
+returned.  The records are separated by empty line, and in each line
+an attribute and its value are separated by the first colon (:).
+A line can be continued using backslash (\) at the end of line, or by
+starting the next line with a space or tab.  Ending a line with \
+effectively removes the "\\\n" string at the end of line, but 
+"\n[ \t]" combination is replaced with "\n".
+Comments, starting with the hash sign (#) are allowed between records.
+An example is:
+
+  id:1
+  name: J. Public
+  phone: 000-111
+
+  id:2
+  etc.
+
+If an attribute is repeated, it will be renamed to an attribute of the
+form att-1, att-2, etc.
 
 =item B<read_starfish_conf>
 
 Reads recursively (up the dir tree) configuration files C<starfish.conf>.
-
 
 =back
 
@@ -1116,9 +1173,13 @@ Reads recursively (up the dir tree) configuration files C<starfish.conf>.
 The script swallows the whole input file at once, so it may not work
 on small-memory machines and with huge files.
 
+=head1 THANKS
+
+I'd like to thank Steve Yeago for comments.
+
 =head1 AUTHOR
 
-Copyright 2001-2003 Vlado Keselj www.cs.dal.ca/~vlado
+Copyright 2001-2005 Vlado Keselj www.cs.dal.ca/~vlado
 
 This script is provided "as is" without expressed or implied warranty.
 This is free software; you can redistribute it and/or modify it under
@@ -1150,7 +1211,11 @@ purpose.  I took a closer look on it on Jun 9, 2003, and was amazed
 with how many similar ideas I found.  For example, the output variable
 is called $OUT, while it is called $O in Starfish.
 
+=item php
+
+F<http://www.php.net>
+
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.9 2003/06/09 13:11:58 vlado Exp $
+# $Id: Starfish.pm,v 3.23 2005/03/29 12:47:38 vlado Exp $

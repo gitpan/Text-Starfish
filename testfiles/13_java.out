@@ -63,13 +63,13 @@ public class Tokenizer {
   } // end of nextToken
 
 }
-//auxdefine test defea
-//     Red prvi;
-//     red zadnji;
-//     //endauxdefine
 //auxdefine jos jedan
 //     Ovo je tekst makroa 1;
 //     2;kraj;
+//     //endauxdefine
+//auxdefine test defea
+//     Red prvi;
+//     red zadnji;
 //     //endauxdefine
 //auxdefine bufExtend
 //     if (i >= buf.length) {
