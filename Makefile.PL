@@ -1,6 +1,6 @@
 use ExtUtils::MakeMaker;
 
-# $Id: Makefile.PL,v 3.2 2002/12/12 16:46:45 vlado Exp $
+# $Id: Makefile.PL,v 3.5 2003/06/09 12:42:55 vlado Exp $
 
 WriteMakefile(
     'NAME'		=> 'Text::Starfish',
@@ -11,8 +11,8 @@ WriteMakefile(
        (
       #ABSTRACT_FROM => 'Starfish.pm', # retrieve abstract from module
        AUTHOR     => 'Vlado Keselj www.cs.dal.ca/~vlado') : ()),
-    'dist'  => {'COMPRESS'=>'gzip', 'SUFFIX' => 'gz'}
-    ,'clean' => {FILES => "tmp* Text"}
+    'dist'  => {'COMPRESS'=>'gzip', 'SUFFIX' => 'gz'},
+    'clean' => {FILES => "tmp* Text *~"}
     ,EXE_FILES => [ 'starfish' ]
 );
 
@@ -29,17 +29,7 @@ print M "\n\n";
 print M q~
 TEST_PROG=./starfish
 DIFF=diff tmp1
-
-test1:;@echo -n $@:&&cp testfiles/1.in tmp1 && ${TEST_PROG}  tmp1&&$(DIFF) testfiles/1.out&&echo -n 'OK '
-testv1:
-	@echo -n $@:
-	cp testfiles/1.in tmp1 && ${TEST_PROG}  tmp1&&$(DIFF) testfiles/1.out
-TEST_LIST+= test1
-TESTV_LIST+= testv1
-mktest1:
-	@echo -n $@:
-	cp testfiles/1.in tmp1&&${TEST_PROG}  tmp1&& cp tmp1 testfiles/1.out
-MKTEST_LIST+= mktest1
+DIFF1=diff tmp/tmp1
 
 test2:;@echo -n $@:&&cp testfiles/2.in tmp1 && ${TEST_PROG} -e='$$ver="testver"' tmp1&&$(DIFF) testfiles/2.out&&echo -n 'OK '
 testv2:

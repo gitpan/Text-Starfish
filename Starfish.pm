@@ -1,34 +1,28 @@
-# (c) 2001-2002 Vlado Keselj www.cs.dal.ca/~vlado
+# (c) 2001-2003 Vlado Keselj www.cs.dal.ca/~vlado
 #
-# $Id: Starfish.pm,v 3.1 2002/12/12 16:10:47 vlado Exp $
-#
-# starfish - yet another embedded Perl
+# starfish and Starfish.pm - yet another embedded Perl
 # (see the documentation following the code (or use:
 # perldoc starfish, or something similar))
 
 package Text::Starfish;
-
 use strict;
-
 require Exporter;
-
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
-
 our @ISA = qw(Exporter);
 
 our %EXPORT_TAGS = ( 'all' => [ qw() ] );
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-our @EXPORT = qw(echo file_modification_date);
-our $VERSION = '0.01';
+our @EXPORT = qw(echo file_modification_date read_starfish_conf);
+our $VERSION = '0.04';
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 3.1 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.9 $, 10)) =~ s/\s+$//;
 
 use vars @EXPORT_OK;
 
 # non-exported package globals go here
-#use vars();
+use vars qw($Sfish_conf_dir);
 
 # initialize package globals, first exported ones
 #$Var1   = '';
@@ -102,7 +96,8 @@ sub run {
     }
 
     if (defined $self->{REPLACE} and ! defined $self->{OUTFILE}) {
-	die "Starfish:output file required for replace";
+	require Carp;
+        Carp::croak("Starfish:output file required for replace");
     }
 
     my $FileCount=0;
@@ -121,6 +116,7 @@ sub run {
 	    elsif ($InFile =~ /\.(?:la)?tex$/i) { $self->setStyle('tex') }
 	    elsif ($InFile =~ /\.java$/i)       { $self->setStyle('java') }
 	    elsif ($InFile =~ /^[Mm]akefile/)   { $self->setStyle('makefile') }
+	    elsif ($InFile =~ /\.ps$/i)         { $self->setStyle('ps') }
 	    else { $self->setStyle('perl') }
 	} else { $self->setStyle($self->{STYLE}) }
 
@@ -217,7 +213,10 @@ sub run {
 # $self->{ttype}: -1 EOF
 #             -2 outer text
 sub scan {
-    my $self = shift; die "(".ref($self).")" unless ref($self) eq 'Text::Starfish';
+    my $self = shift;
+    if (ref($self) ne 'Text::Starfish') {
+	require Carp; Carp::croak("(".ref($self).")");
+    }
 
     $self->{prefix} = $self->{suffix} = '';
     if ($self->{data} eq '') {
@@ -263,8 +262,7 @@ sub scan {
 # The main subroutine for evauating a snippet
 #
 sub evaluate {
-    my $self = shift; die "(".ref($self).")" unless ref($self) eq
-	'Text::Starfish';
+    my $self = shift;
 
     my $pref = shift;
     my $code = shift; my $c = $code;
@@ -289,17 +287,17 @@ sub evaluate {
 }
 
 sub eval1 {
-    my $self = shift; die "(".ref($self).")" unless ref($self) eq 'Text::Starfish';
+    my $self = shift;
 
     my $code = shift;
     my $comment = shift;
     eval("package main; no strict; $code");
-    die "$comment code error:$@\ncode:$code" if $@;
+    if ($@)
+    { require Carp; Carp::croak("$comment code error:$@\ncode:$code"); }
 }
 
 sub define {
-    my $self = shift; die "(".ref($self).")" unless ref($self) eq
-	'Text::Starfish';
+    my $self = shift;
 
     my $pref = shift;
     my $data = shift;
@@ -315,8 +313,7 @@ sub define {
 }
 
 sub MCdefine {
-    my $self = shift; die "(".ref($self).")" unless ref($self) eq 'Text::Starfish';
-
+    my $self = shift;
     my $pref = shift;
     my $data = shift;
     my $suf = shift;
@@ -573,6 +570,13 @@ sub setStyle {
 	       {begin => '<!--<?', end => '!>-->', f => \&evaluate }];
 	$self->{CodePreparation} = '';
     }
+    elsif ($s eq 'ps') {
+	$self->{LineComment} = '%';
+	$self->{hook}=[{begin => "\n% +\n", end=>"\n% -\n",   # Reserved for output
+		f=>sub{return''}},
+	       {begin => '<?', end => '!>', f => \&evaluate }];
+	$self->{CodePreparation} = 's/\\n%/\\n/g';
+    }
     else { die "starfish:setStyle:unknown style:$s" }
     $self->{Style} = $s;
 }
@@ -714,6 +718,21 @@ sub file_modification_date() {
 		  [$a[4]]." $a[3], $a[5]";
 }
 
+sub read_starfish_conf() {
+    $Sfish_conf_dir = '.' unless $Sfish_conf_dir;
+    return unless -e "$Sfish_conf_dir/starfish.conf";
+    
+    # First read configurations up the tree
+    my $save = $Sfish_conf_dir;
+    $Sfish_conf_dir = "$save/..";
+    read_starfish_conf();
+    $Sfish_conf_dir = $save;
+
+    package main;
+    require "$Text::Starfish::Sfish_conf_dir/starfish.conf";
+    package Text::Starfish;
+}
+
 __END__
 # Documentation
 =pod
@@ -737,32 +756,22 @@ C<!E<gt>>.
 This is yet another embedded Perl.  If you know Perl and php, you
 probably know what is the idea: embed Perl code inside the text,
 execute it is some way, so that the output is interleaved with the text.
+Very similar projects exist and some of them are listed in L<"SEE
+ALSO">.
 
 There are two files in this package: a module (Starfish.pm) and a
 small script (starfish) that relies on the module.
+The earlier name of this module was SLePerl (Something Like ePerl),
+but I have changed it to C<starfish> -- sounds better and easier to
+type.  I was thinking about `oyster' but some people are thinking
+about using it for Perl beans, and there is a (yet another) Perl
+module for embedded Perl C<Text::Oyster>, so I gave up.
 
-This script is somewhat similar to ePerl, about which you can read at
-F<http://www.engelschall.com/sw/eperl/>.  Actually, if you go to this
-site, and follow the link "Related,", you will see that there are a
-whole bunch of similar projects.  The eariler name of this script was
-SLePerl (Something Like ePerl), but I have changed it to C<starfish>
--- sounds better and easier to type.  I was thinking about `oyster'
-but some people are thinking about using it for Perl beans, and there
-is a (yet another) Perl module for embedded Perl C<Text::Oyster>, so I
-gave up.
-
-The idea with the `C<starfish>' name is: You embed the Perl code into
+The idea with the `C<starfish>' name is: the Perl code is embedded into
 a text, so the text is equivalent to a shellfish containing pearls.
 A starfish comes by and eats the shellfish...  Unlike a natural
 starfish, this C<starfish> is interested in pearls and does not
 normally touch most of the surrounding meat.
-
-Since there are other similar projects, then, why am I working (in
-very rare spare time) on this thing?  There are many reasons.  Here
-are two: One, I don't want to install additional binaries, and other
-stuff -- one script-let and one module (possibly a long one) should be
-enough.  Two, I want to be able to combine the code and the output in
-the same file.
 
 Starfish is used to embed some Perl code into arbitrary text file.
 After running the script, it will execute the Perl snippets and put
@@ -1039,7 +1048,7 @@ output file in order to write to that file, if needed.
 
 =over 5
 
-=item B<$Star->{INFILE}>
+=item $Star->{INFILE}
 
 name of the current input file
 
@@ -1091,6 +1100,15 @@ clashes. The following conversions are done in this order:
        <  =>  &lt;
        "  =>  &quot;
 
+=item B<file_modification_date>
+
+Returns modification date of this file.
+
+=item B<read_starfish_conf>
+
+Reads recursively (up the dir tree) configuration files C<starfish.conf>.
+
+
 =back
 
 =head1 LIMITATIONS AND BUGS
@@ -1100,12 +1118,39 @@ on small-memory machines and with huge files.
 
 =head1 AUTHOR
 
-Copyright 2001-2002 Vlado Keselj vlado@ cs. dal. ca
+Copyright 2001-2003 Vlado Keselj www.cs.dal.ca/~vlado
 
-This script is provided "as is" without express or implied warranty.
+This script is provided "as is" without expressed or implied warranty.
 This is free software; you can redistribute it and/or modify it under
 the same terms as Perl itself.
 
 The latest version can be found at F<http://www.cs.dal.ca/~vlado/srcperl/>.
 
+=head1 SEE ALSO
+
+There are many similar projects to this.  When I was thinking whether I
+should start this project to use an existing one, I found only ePerl
+at F<http://www.engelschall.com/sw/eperl/>.  However, that was the
+whole new binary package and it was/is the overkill for my purposes.
+I learned later about the others, and I am including a list below:
+
+=over 4
+
+=item ePerl
+
+This script is somewhat similar to ePerl, about which you can read at
+F<http://www.engelschall.com/sw/eperl/>.  Actually, if you go to this
+site, and follow the link "Related,", you will see that there are a
+whole bunch of similar projects.
+
+=item Text::Template
+
+Text::Template is module with very similar, if not exactly the same
+purpose.  I took a closer look on it on Jun 9, 2003, and was amazed
+with how many similar ideas I found.  For example, the output variable
+is called $OUT, while it is called $O in Starfish.
+
+=back
+
 =cut
+# $Id: Starfish.pm,v 3.9 2003/06/09 13:11:58 vlado Exp $
