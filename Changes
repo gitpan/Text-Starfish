@@ -1,0 +1,6 @@
+Revision history for Perl extension Text::Starfish.
+
+0.01  Thu Dec 12 08:53:16 2002
+	- original version; created by h2xs 1.21 with options
+		-X -n Text::Starfish
+

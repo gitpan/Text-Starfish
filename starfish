@@ -1,0 +1,17 @@
+#!/usr/bin/perl -s
+# (c) 2001-2002 Vlado Keselj vlado@ cs. dal. ca
+#
+# $Id: starfish,v 3.0 2002/12/12 16:00:23 vlado Exp $
+#
+# starfish - the script for using Starfish.pm
+
+use Text::Starfish;
+
+my $sf = Text::Starfish->new();
+
+$sf->{OUTFILE}       = $o       if defined $o;       undef($o);
+$sf->{INITIAL_CODE}  = $e       if defined $e;       undef($e);
+$sf->{REPLACE}       = $replace if defined $replace; undef($replace);
+$sf->{NEW_FILE_MODE} = $mode    if defined $mode;    undef($mode);
+
+$sf->run(@ARGV);
