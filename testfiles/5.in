@@ -17,3 +17,13 @@ Document 1
 %Begin2
 %Document 2
 %End2
+
+% Another example is:
+% <?
+% $Star->addHook('somerandomdelimiter','ending','default');
+% !>
+
+% somerandomdelimiter echo "let's see what happens" ending
+
+Now, ignore the rest: < ? $Star->addHook('','','ignore') !>
+the rest...

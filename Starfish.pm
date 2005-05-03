@@ -18,11 +18,11 @@ our @ISA = qw(Exporter);
 our %EXPORT_TAGS = ( 'all' => [ qw() ] );
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(echo file_modification_date file_modification_time read_starfish_conf);
-our $VERSION = '0.05';
+our $VERSION = '1.01';
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 3.23 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.30 $, 10)) =~ s/\s+$//;
 
 use vars @EXPORT_OK;
 
@@ -70,10 +70,8 @@ sub run {
 	$self->{NEW_FILE_MODE} = oct($self->{NEW_FILE_MODE}) if $self->{NEW_FILE_MODE} =~ /^0/;
     }
 
-    if (defined $self->{REPLACE} and ! defined $self->{OUTFILE}) {
-	require Carp;
-        Carp::croak("Starfish:output file required for replace");
-    }
+    if (defined $self->{REPLACE} and !defined $self->{OUTFILE})
+    { _croak("Starfish:output file required for replace") }
 
     my $FileCount=0;
     $self->{Loops} = 1;
@@ -191,9 +189,6 @@ sub run {
 #             -2 outer text
 sub scan {
     my $self = shift;
-    if (ref($self) ne 'Text::Starfish') {
-	require Carp; Carp::croak("(".ref($self).")");
-    }
 
     $self->{prefix} = $self->{suffix} = '';
     if ($self->{data} eq '') {	# no more data, EOF
@@ -201,38 +196,46 @@ sub scan {
 	$self->{currenttoken} = '';
     }
     else {
-	my $i = length($self->{data}) + 1;
+	my $i1 = length($self->{data}) + 1;
+	my $i2;
 	$self->{ttype} = -2;
-	my $ttype;
-	foreach $ttype (0 .. $#{ $self->{hook} }) {
+	foreach my $ttype (0 .. $#{ $self->{hook} }) {
 	    my $j = index($self->{data}, $self->{hook}->[$ttype]->{'begin'});
-	    if ($j!=-1 && $j <= $i) { $i = $j; $self->{ttype} = $ttype; }
+	    next unless $j != -1 && $j <= $i1;
+	    if ($self->{hook}->[$ttype]->{'end'} ne '') {
+		next if -1 == ($i2 = index($self->{data},
+					   $self->{hook}->[$ttype]->{'end'}));
+	    } else { $i2 = length($self->{data}) + 1 }
+	    $i1 = $j; $self->{ttype} = $ttype;
 	}
 
 	if ($self->{ttype}==-2) {$self->{currenttoken}=$self->{data}; $self->{data}=''}
-	elsif ($i > 0) {
-	    $self->{currenttoken} = substr($self->{data}, 0, $i);
-	    $self->{data} = substr($self->{data}, $i);
+	elsif ($i1 > 0) {
+	    $self->{currenttoken} = substr($self->{data}, 0, $i1);
+	    $self->{data} = substr($self->{data}, $i1);
 	    $self->{ttype} = -2;
 	} else {
-	    $i = length($self->{hook}->[$self->{ttype}]->{'begin'});
-	    $self->{prefix} = substr($self->{data}, 0, $i);
-	    $self->{data}   = substr($self->{data}, $i);
-	    if ($self->{hook}->[$self->{ttype}]->{'end'}) {
-		$i = index($self->{data}, $self->{hook}->[$self->{ttype}]->{'end'});
-		if ($i==-1) { $self->{currenttoken} = $self->{data}; $self->{data} = ''; }
-		else {
-		    $self->{currenttoken} = substr($self->{data}, 0, $i);
-		    $self->{suffix} = $self->{hook}->[$self->{ttype}]->{'end'};
-		    $self->{data} = substr($self->{data}, $i +
-				   length($self->{hook}->[$self->{ttype}]->{'end'}));
-		}
-	    } else { $self->{currenttoken} = ''; $self->{suffix} = ''; }
+	    $self->{prefix} = $self->{hook}->[$self->{ttype}]->{'begin'};
+	    $self->{suffix} = $self->{hook}->[$self->{ttype}]->{'end'};
+
+	    my $pl = length($self->{prefix});
+	    my $sl = length($self->{suffix});
+	    $self->{currenttoken} = substr($self->{data}, $i1+$pl, $i2-$i1-$pl);
+	    $self->{data} = substr($self->{data}, $i2+$sl);
 	}
     }
 
-
     return $self->{ttype};
+}
+
+# eval wrapper
+sub eval1 {
+    my $self = shift;
+
+    my $code = shift;
+    my $comment = shift;
+    eval("package main; no strict; $code");
+    if ($@) { _croak("$comment code error:$@\ncode:$code") }
 }
 
 ########################################################################
@@ -263,14 +266,15 @@ sub evaluate {
     return "$pref$c$suf";
 }
 
-sub eval1 {
+# a predefined evaluator
+sub eval_ignore {
     my $self = shift;
+    return '' if $self->{REPLACE};
 
+    my $pref = shift;
     my $code = shift;
-    my $comment = shift;
-    eval("package main; no strict; $code");
-    if ($@)
-    { require Carp; Carp::croak("$comment code error:$@\ncode:$code"); }
+    my $suf = shift;
+    return $pref.$code.$suf;
 }
 
 sub define {
@@ -559,23 +563,42 @@ sub setStyle {
 }
 
 sub addHook {
-    my $self = shift; die "(".ref($self).")" unless ref($self) eq
-	'Text::Starfish';
-
-    my $p = shift; my $s = shift; my $fun = shift;
+    my $self = shift;
+    my $p = shift;
+    my $s = shift;
+    my $fun = shift;
     my @Hook = @{ $self->{hook} };
-    eval("push \@Hook, {begin=>\$p, end=>\$s,".
-	 "f=>sub{\n".
-	 "local \$_;\n".
-	 "my \$self = shift;\n".
-	 "my \$p = shift; \$_ = shift; my \$s = shift;\n".
-	 "$fun; return \"\$p\$_\$s\"; } };");
-    die "addHook error:$@" if $@;
+    if ($fun eq 'default')
+    { push @Hook, {begin=>$p, end=>$s, f=>\&evaluate} }
+    elsif ($fun eq 'ignore')
+    { push @Hook, {begin=>$p, end=>$s, f=>\&eval_ignore} }
+    else {
+	eval("push \@Hook, {begin=>\$p, end=>\$s,".
+	     "f=>sub{\n".
+	     "local \$_;\n".
+	     "my \$self = shift;\n".
+	     "my \$p = shift; \$_ = shift; my \$s = shift;\n".
+	     "$fun; return \"\$p\$_\$s\"; } };");
+    }
+    _croak("addHook error:$@") if $@;
     $self->{hook} = \@Hook;
 }
 
+sub rmHook {
+    my $self = shift;
+    my $p = shift;
+    my $s = shift;
+    my @Hook = @{ $self->{hook} };
+    my @Hook1 = ();
+    foreach my $h (@Hook) {
+	if ($h->{begin} eq $p and $h->{end} eq $s) {}
+	else { push @Hook1, $h }
+    }
+    $self->{hook} = \@Hook1;
+}
+
 sub defineMacros {
-    my $self = shift; die "(".ref($self).")" unless ref($self) eq 'Text::Starfish';
+    my $self = shift;
 
     return if $self->{CurrentLoop} > 1;
     $self->{Loops} = 2 if $self->{Loops} < 2;
@@ -635,18 +658,19 @@ sub getmakefilelist ($$) {
     return split(/\s+/, $f);
 }
 
+# Should be used for example
 # e.g. addHookUnComment("\n%Dbegin", "\n%Dend");
-sub addHookUnComment {
-    my $t1 = shift;
-    my $t2 = shift;
-    addHook($t1, $t2, 's/\n%!/\n/g');
-}
-
-sub addHookComment {
-    my $t1 = shift;
-    my $t2 = shift;
-    addHook($t1, $t2, 's/\n(?:%!)?/\n%!/g');
-}
+#sub addHookUnComment {
+#    my $t1 = shift;
+#    my $t2 = shift;
+#    addHook($t1, $t2, 's/\n%!/\n/g');
+#}
+#
+#sub addHookComment {
+#    my $t1 = shift;
+#    my $t2 = shift;
+#    addHook($t1, $t2, 's/\n(?:%!)?/\n%!/g');
+#}
 
 sub echo($@) { $::O .= join('', @_) }
 
@@ -696,6 +720,8 @@ sub read_records($ ) {
       else { $record = $arg; $arg = ''; }
       my $r = {};
       while ($record) {
+	  if ($record =~ /^#.*\n/) { $record=$'; next; } # allow
+                                                 #   comments in records		
         $record =~ /^([^\n:]*):/ or
 	    croak "field not properly defined in record: ($record)";
 	my $k = $1; $record = $'; my $v;
@@ -748,6 +774,12 @@ sub read_starfish_conf() {
 	package Text::Starfish;
 	chdir $currdir or die "cannot chdir to $currdir";
     }
+}
+
+sub _croak {
+    my $m = shift;
+    require Carp;
+    Carp::croak($m);
 }
 
 __END__
@@ -958,9 +990,9 @@ Copy p.java to p_t.java and modify p_t.java to be like:
 
       //<? $O = "    ".(defined $Release ?
       //qq[System.out.println("Test version");] :
-      //qq[System.out.println("Release version";]);
+      //qq[System.out.println("Release version");]);
       //!>//+
-      System.out.println("Release version";//-
+      System.out.println("Release version");//-
 
       return 0;
     }
@@ -1043,7 +1075,8 @@ Old macro definition can be overriden by:
 =item B<-o=>I<outputfile>
 
 specifies an output file.  By default, the input file is used as the
-output file.
+output file.  If the specified output file is '-', then the output is
+produced to the standard output.
 
 =item B<-e=>I<initialcode>
 
@@ -1082,6 +1115,31 @@ The Starfish object processing this file (this).
 Name of the current input file.
 
 =back
+
+=head1 METHODS
+
+=head2 $o->addHook($p,$s,$f)
+
+Adds a new hook. The parameter $p is the starting delimiter, $s is the
+ending delimiter, and $f is the evaluator.
+There are several different ways of providing $f:
+
+=over 5
+
+=item special string 'default', in which case the default Starfish
+ evaluator is used,
+
+=item special string 'ignore', equivalent to producing no echo,
+
+=item other strings are interpreted as code which is embedded in an
+    evaluator by providing a local $_, $self which is the current
+    Starfish object, $p - the prefix, and $s the suffix.
+    After executing the code $p.$_.$s is returned.
+
+=head2 $o->rmHook($p,$s)
+
+Removes a hook specified by the starting delimiter $p, and the ending
+delimiter $s.
 
 =head1 PREDEFINED FUNCTIONS
 
@@ -1189,33 +1247,56 @@ The latest version can be found at F<http://www.cs.dal.ca/~vlado/srcperl/>.
 
 =head1 SEE ALSO
 
-There are many similar projects to this.  When I was thinking whether I
-should start this project to use an existing one, I found only ePerl
-at F<http://www.engelschall.com/sw/eperl/>.  However, that was the
-whole new binary package and it was/is the overkill for my purposes.
-I learned later about the others, and I am including a list below:
+There are several projects similar to Starfish.  Some of them are
+text-embedded programming projects such as PHP with different
+programming languages, and there are similar Perl-based projects.
+When I was thinking about a need of a framework like this one (1998),
+I have found ePerl project.  However, it was too heavy weight for my
+purposes, and it did not support the "update" mode, vs. replace mode
+of operation.  I learned about more projects over time and they are
+included in the list below.
 
 =over 4
 
-=item ePerl
+=item [ePerl] ePerl
 
 This script is somewhat similar to ePerl, about which you can read at
-F<http://www.engelschall.com/sw/eperl/>.  Actually, if you go to this
-site, and follow the link "Related,", you will see that there are a
-whole bunch of similar projects.
+F<http://www.ossp.org/pkg/tool/eperl/>.  It was developed by Ralf
+S. Engelshall in the period from 1996 to 1998.
 
 =item Text::Template
 
-Text::Template is module with very similar, if not exactly the same
-purpose.  I took a closer look on it on Jun 9, 2003, and was amazed
-with how many similar ideas I found.  For example, the output variable
-is called $OUT, while it is called $O in Starfish.
+Text::Template is a module with similar functionality as Starfish.
+An interesting similarity is that the output variable in
+Text::Template is called $OUT, compared to #O in Starfish.
 
 =item php
 
 F<http://www.php.net>
 
+=item [ePerl-h] ePerl hack by David Ljung Madison
+
+This is a Perl script simulating the ePerl functionality, but with
+obviously much lower weight.  It is developed by David Ljung Madison,
+and can be found at the URL: F<http://marginalhacks.com/Hacks/ePerl/>
+
+=item [Text::Template] Perl module Text::Template by Mark Jason
+  Dominus.
+
+F<http://search.cpan.org/~mjd/Text-Template/>
+Text::Template is a module with similar functionality as Starfish.
+An interesting similarity is that the output variable in
+Text::Template is called $OUT, compared to $O in Starfish.
+
+=item [HTML::Mason] Perl module HTML::Mason by Jonathan Swartz, Dave
+  Rolsky, and Ken Williams.
+
+F<http://search.cpan.org/~drolsky/HTML-Mason-1.28/lib/HTML/Mason/Devel.pod>
+The module HTML::Mason can also be seen as an embedded Perl system, but
+it is a larger system with the design objective being a
+"high-performance, dynamic web site authoring system".
+
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.23 2005/03/29 12:47:38 vlado Exp $
+# $Id: Starfish.pm,v 3.30 2005/05/03 03:33:36 vlado Exp $

@@ -17,3 +17,16 @@ An example of C-preprocessor-like behaviour in (La)TeX:
 %Begin2
 Document 2
 %End2
+
+% Another example is:
+% <?
+% $Star->addHook('somerandomdelimiter','ending','default');
+% !>
+
+% somerandomdelimiter echo "let's see what happens" ending%+
+let's see what happens
+%-
+
+
+Now, ignore the rest: < ? $Star->addHook('','','ignore') !>
+the rest...

@@ -18,3 +18,14 @@ Revision history for Perl extension Text::Starfish.
 	- read_starfish_conf executes each starfish.conf in the
 	  approapriate directory
 	- documentation improvement
+
+1.01
+	- introduced comments within records in read_records
+	- bug fixing regarding testing method
+	- added rmHook function
+	- introduced special 'default' to addHook
+	- fixing tests
+	- removed addHookComment and addHookUnComment, 'ignore'
+	  in addHook should be used instead
+	- requiring suffix in addition to prefix in scan,
+	- allowing '' prefix and suffix

@@ -1,5 +1,8 @@
-Text/Starfish version 0.05
-==========================
+<? read_starfish_conf(); echo &readme_line(); !>
+#+
+Text::Starfish version 1.01
+===========================
+#-
 
 The Text::Starfish module supports processing of embedded Perl code in
 an arbitrary text.  Documentation is part of the file Starfish.pm

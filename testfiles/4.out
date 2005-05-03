@@ -1,7 +1,11 @@
-# A simple example, after running SLePerl.pl on the following file:
-#     # SLePerl:LastUpdate:April 26, 2001 13:57:17
-#     <? $CurrentToken = 'test'; $O= "test" !>
+Testing hook removal:
+
+<? echo 'This will evaluate';
+   $Star->rmHook('<?', '!'.'>');
+!>
 #+
-test
+This will evaluate
 #-
 
+
+<? echo 'But not this'; !>

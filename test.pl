@@ -53,17 +53,56 @@ chdir 'tmp' or die;
     `./starfish -o=14.out -e='\$Star::HideMacros=1' 14.java`;
     ok(getfile('14.out'),
        getfile('../testfiles/14.out'));
-    &testcase(22);
 
-chdir '..' or die;
+    # 15,16
+    `cp ../testfiles/15.java tmp.java`;
+    `./starfish -o=tmp.ERR -e'\$Star::HideMacros=1' tmp.java>tmp1 2>&1`;
+    ok($? != 0);
+    okfiles('../testfiles/15.out', 'tmp1');
 
-foreach my $i (15..21) {
-    print `make test$i`;
+    # 17, old 16
+    `cp ../testfiles/16develop.SLeP tmp.SLeP`;
+    `cp ../testfiles/16.tex tmp.tex`;
+    `./starfish tmp.SLeP tmp.tex`;
+    `cat tmp.SLeP tmp.tex>tmp1`;
+    okfiles('../testfiles/16.out', 'tmp1');
+
+    # 18, old 17
+    `cp ../testfiles/p_t.java tmp.java`;
+    `./starfish -o=tmp1 tmp.java`;
+    okfiles('../testfiles/17.out', 'tmp1');
+
+    # 19, old 18
+    `cp ../testfiles/p_t.java tmp.java`;
+    `./starfish -e='\$Release=1' -o=tmp1 tmp.java`;
+    okfiles('../testfiles/18.out', 'tmp1');
+
+    # 20, old 19
+    `cp ../testfiles/19.html tmp.html`;
+    `./starfish -replace -o=tmp2 -mode=0644 tmp.html`;
+    `ls -l tmp2|sed 's/ .*//'>tmp1`;
+    okfiles('../testfiles/19.out', 'tmp1');
+
+    # 21, old 20 has to be done after previous
+    `./starfish -replace -o=tmp2 tmp.html`;
+    `ls -l tmp2|sed 's/ .*//'>tmp1`;
+    okfiles('../testfiles/20.out', 'tmp1');
+
+    # 22, old 21
+    `cp ../testfiles/21.html tmp2.html`;
+    `./starfish -replace -o=tmp1 tmp2.html`;
+    okfiles('../testfiles/21.out', 'tmp1');
+
+    # 23
+    &testcase(22);    
+
+sub okfiles {
+    my $f1 = shift;
+    while (@_) {
+	my $f2 = shift;
+	ok(getfile($f1), getfile($f2));
+    }
 }
-
-chdir 'tmp' or die;
-
-    &testcase(22);
 
 sub getfile($) {
     my $f = shift;
@@ -121,8 +160,6 @@ sub testcase {
     else {
 	#print "./starfish -e='\$ver=\"testver\"' $procfile\n";
 	`./starfish -e='\$ver="testver"' $procfile`;
-	ok(getfile($procfile),
-	   getfile("../testfiles/$outfile"));
+	ok(getfile($procfile), getfile("../testfiles/$outfile"));
     }
 }
-

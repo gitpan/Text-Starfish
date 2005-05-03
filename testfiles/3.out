@@ -1,15 +1,15 @@
-# A simple example, after running SLePerl.pl on the following file:
+# A simple example... running starfish on the following file...
 #     # SLePerl:LastUpdate:April 27, 2001 11:35:14
 #     <? $O= "test" !>
 #+
 test
 #-
 
-izmedju
+line before
 #SLePerlOut
 test
 #/SLePerlOut
- nastavak
+ continue
 
 # <? $test = 'test'; !>
 # <? $O="ver=($ver) test=($test)" !>

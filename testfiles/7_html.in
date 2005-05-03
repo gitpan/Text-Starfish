@@ -1,4 +1,10 @@
 <HEAD>
 <BODY>
 <!--<? $O="This code should be replaced by this."; !>-->
+
+Ignore example
+<!--<? $Star->addHook("#ignore", "\n", 'ignore'); !>-->
+
+#ignore this
+
 </BODY>
