@@ -18,11 +18,11 @@ our @ISA = qw(Exporter);
 our %EXPORT_TAGS = ( 'all' => [ qw() ] );
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(echo file_modification_date file_modification_time read_starfish_conf);
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 3.30 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.33 $, 10)) =~ s/\s+$//;
 
 use vars @EXPORT_OK;
 
@@ -112,10 +112,7 @@ sub run {
 	my $Out='';
 	$self->scan();
 	while ($self->{ttype} != -1) {
-	    if ($self->{ttype} > -1 ) {
-		#
-		# Call token handler
-		#
+	    if ($self->{ttype} > -1 ) {	                        # call evaluator
 		$Out.= &{$self->{hook}->[$self->{ttype}]->{f}}
 		( $self, $self->{prefix}, $self->{currenttoken}, $self->{suffix});
 	    }
@@ -286,9 +283,9 @@ sub define {
 
     if ($self->{CurrentLoop} > 1) { return "$pref$data$suf"; }
 
-    $data =~ /^.+/ or die "expected macro spec";
-    die "no macro spec" unless $&;
-    die "double macro def (forbidden):$&" if ($self->{ForbidMacro}->{$&});
+    $data =~ /^.+/ or _croak("expected macro spec");
+    _croak("no macro spec") unless $&;
+    _croak("double macro def (forbidden):$&") if ($self->{ForbidMacro}->{$&});
     $self->{Macros}->{$&} = $data;
     return '';
 }
@@ -578,7 +575,9 @@ sub addHook {
 	     "local \$_;\n".
 	     "my \$self = shift;\n".
 	     "my \$p = shift; \$_ = shift; my \$s = shift;\n".
-	     "$fun; return \"\$p\$_\$s\"; } };");
+	     "$fun;\n".
+             'if ($self->{REPLACE}) { return $_ }'."\n".
+             "return \"\$p\$_\$s\"; } };");
     }
     _croak("addHook error:$@") if $@;
     $self->{hook} = \@Hook;
@@ -1299,4 +1298,4 @@ it is a larger system with the design objective being a
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.30 2005/05/03 03:33:36 vlado Exp $
+# $Id: Starfish.pm,v 3.33 2005/05/04 03:07:06 vlado Exp $

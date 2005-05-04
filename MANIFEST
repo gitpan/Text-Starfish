@@ -1,5 +1,7 @@
 README
 MANIFEST
+META.yml
+starfish.conf
 Changes
 Makefile.PL
 Starfish.pm

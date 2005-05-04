@@ -19,7 +19,7 @@ Revision history for Perl extension Text::Starfish.
 	  approapriate directory
 	- documentation improvement
 
-1.01
+1.01  Tue May  3 00:38:19 ADT 2005
 	- introduced comments within records in read_records
 	- bug fixing regarding testing method
 	- added rmHook function
@@ -29,3 +29,6 @@ Revision history for Perl extension Text::Starfish.
 	  in addHook should be used instead
 	- requiring suffix in addition to prefix in scan,
 	- allowing '' prefix and suffix
+
+1.02  Wed May  4 00:06:38 ADT 2005
+	- addHook updated to consider REPLACE option
