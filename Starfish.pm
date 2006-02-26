@@ -1,4 +1,4 @@
-# (c) 2001-2005 Vlado Keselj www.cs.dal.ca/~vlado
+# (c) 2001-2006 Vlado Keselj www.cs.dal.ca/~vlado
 #
 # Starfish.pm and starfish - a Perl-based System for Text-Embedded
 #     Programming and Preprocessing
@@ -10,6 +10,7 @@ package Text::Starfish;
 use strict;
 use Carp;
 use Cwd;
+use POSIX;
 
 require Exporter;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
@@ -17,12 +18,13 @@ our @ISA = qw(Exporter);
 
 our %EXPORT_TAGS = ( 'all' => [ qw() ] );
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-our @EXPORT = qw(echo file_modification_date file_modification_time read_starfish_conf);
-our $VERSION = '1.02';
+our @EXPORT = qw(echo file_modification_date file_modification_time
+		 read_starfish_conf last_update);
+our $VERSION = '1.03';
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 3.33 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.43 $, 10)) =~ s/\s+$//;
 
 use vars @EXPORT_OK;
 
@@ -92,6 +94,7 @@ sub run {
 	    elsif ($f =~ /\.java$/i)       { $self->setStyle('java') }
 	    elsif ($f =~ /^[Mm]akefile/)   { $self->setStyle('makefile') }
 	    elsif ($f =~ /\.ps$/i)         { $self->setStyle('ps') }
+	    elsif ($f =~ /\.py$/i)         { $self->setStyle('python') }
 	    else { $self->setStyle('perl') }
 	} else { $self->setStyle($self->{STYLE}) }
 
@@ -103,84 +106,105 @@ sub run {
 	$self->{data} = getfile $InFile;
 
 	my $ExistingText;
-	if (! defined $self->{OUTFILE}) { $ExistingText = $self->{data} }
-	elsif ($FileCount > 1)  { $ExistingText = '' }
-	elsif (! -f $self->{OUTFILE})   { $ExistingText = '' }
-	else { $ExistingText = getfile $self->{OUTFILE} }
+	if (! defined $self->{OUTFILE}) {
+	    $ExistingText = $self->{data};
+	    $self->{LastUpdateTime} = (stat $InFile)[9];
+	}
+	elsif ($FileCount > 1)  {
+	    $ExistingText = '';
+	    $self->{LastUpdateTime} = time;
+	}
+	elsif (! -f $self->{OUTFILE})   {
+	    $ExistingText = '';
+	    $self->{LastUpdateTime} = time;
+	}
+	else {
+	    $ExistingText = getfile $self->{OUTFILE};
+	    $self->{LastUpdateTime} = (stat $self->{OUTFILE})[9];
+	}
 
       START:
-	my $Out='';
+	$self->{Out} = '';
 	$self->scan();
 	while ($self->{ttype} != -1) {
 	    if ($self->{ttype} > -1 ) {	                        # call evaluator
-		$Out.= &{$self->{hook}->[$self->{ttype}]->{f}}
+		$self->{Out}.= &{$self->{hook}->[$self->{ttype}]->{f}}
 		( $self, $self->{prefix}, $self->{currenttoken}, $self->{suffix});
 	    }
-	    else { $Out.=$self->{currenttoken} }
+	    else { $self->{Out}.=$self->{currenttoken} }
 	    $self->scan();
 	}
 
 	if ($self->{CurrentLoop} < $self->{Loops}) {
 	    ++$self->{CurrentLoop};
-	    $self->{data} = $Out;
+	    $self->{data} = $self->{Out};
+	    if ($ExistingText ne $self->{Out})
+	    { $self->{LastUpdateTime} = time }
 	    goto START;
 	}
 
-    if (defined $self->{macrosdefined}) {
-	my ($m, $s);
-	while (($m,$s) = each %{$self->{Macros}}) {
-	    if ($s =~ /\n/) {
-		my $p1 = "$`$&"; $s = $';
-		if ($s) { $s = $p1.wrap($s) }
-		else { $s = $p1 }
-	    }
-	    $Out .= $self->{MprefAuxDefine}.$s.$self->{MsufAuxDefine};
-	}
-    }
-
-    if ($FileCount==1 && defined $self->{OUTFILE}) {
-	# touch the outfile if it does not exist
-	if ( ! -f $self->{OUTFILE} ) {
-	    putfile $self->{OUTFILE};
-	    if (defined $self->{NEW_FILE_MODE}) { chmod $self->{NEW_FILE_MODE}, $self->{OUTFILE}}
-	    else                      { chmod ((stat $InFile)[2]), $self->{OUTFILE}}
-	}
-	elsif  (defined $self->{NEW_FILE_MODE}) { chmod $self->{NEW_FILE_MODE}, $self->{OUTFILE} }
-    }
-
-    # write the text if changed
-    if ($ExistingText ne $Out) {
-	if (defined $self->{OUTFILE}) {
-	    # If the OutFile is defined, we may have to play with
-	    # permissions in order to write.  Be careful! Allow
-	    # unallowed write only on outfile and if -mode is
-	    # specified
-	    my $mode = ((stat $self->{OUTFILE})[2]);
-	    if (($mode & 0200) == 0 and defined $self->{NEW_FILE_MODE}) {
-		chmod $mode|0200, $self->{OUTFILE};
-		if ($FileCount==1) { putfile $self->{OUTFILE}, $Out }
-		else            { appendfile $self->{OUTFILE}, $Out }
-		chmod $mode, $self->{OUTFILE};
-	    } else {
-		if ($FileCount==1) { putfile $self->{OUTFILE}, $Out }
-		else            { appendfile $self->{OUTFILE}, $Out }
+	if (defined $self->{macrosdefined}) {
+	    my ($m, $s);
+	    while (($m,$s) = each %{$self->{Macros}}) {
+		if ($s =~ /\n/) {
+		    my $p1 = "$`$&"; $s = $';
+		    if ($s) { $s = $p1.wrap($s) }
+		    else { $s = $p1 }
+		}
+		$self->{Out}.= $self->{MprefAuxDefine}.$s.$self->{MsufAuxDefine};
 	    }
 	}
-	else {
-	    putfile $InFile, $Out;
-	    chmod $self->{NEW_FILE_MODE}, $InFile if defined $self->{NEW_FILE_MODE};
+
+	if ($FileCount==1 && defined $self->{OUTFILE}) {
+	    # touch the outfile if it does not exist
+	    if ( ! -f $self->{OUTFILE} ) {
+		putfile $self->{OUTFILE};
+		if (defined $self->{NEW_FILE_MODE}) { chmod $self->{NEW_FILE_MODE}, $self->{OUTFILE}}
+		else                      { chmod ((stat $InFile)[2]), $self->{OUTFILE}}
+	    }
+	    elsif  (defined $self->{NEW_FILE_MODE}) { chmod $self->{NEW_FILE_MODE}, $self->{OUTFILE} }
 	}
-    }
-    elsif (defined $self->{NEW_FILE_MODE}) {
-	if (defined $self->{OUTFILE}) { chmod $self->{NEW_FILE_MODE}, $self->{OUTFILE} }
-	else                  { chmod $self->{NEW_FILE_MODE}, $InFile }
-    }
-}				# end of while (@args)
+
+	# write the text if changed
+	if ($ExistingText ne $self->{Out}) {
+	    if (defined $self->{OUTFILE}) {
+		# If the OutFile is defined, we may have to play with
+		# permissions in order to write.  Be careful! Allow
+		# unallowed write only on outfile and if -mode is
+		# specified
+		my $mode = ((stat $self->{OUTFILE})[2]);
+		if (($mode & 0200) == 0 and defined $self->{NEW_FILE_MODE}) {
+		    chmod $mode|0200, $self->{OUTFILE};
+		    if ($FileCount==1) { putfile $self->{OUTFILE}, $self->{Out} }
+		    else            { appendfile $self->{OUTFILE}, $self->{Out} }
+		    chmod $mode, $self->{OUTFILE};
+		} else {
+		    if ($FileCount==1) { putfile $self->{OUTFILE}, $self->{Out} }
+		    else            { appendfile $self->{OUTFILE}, $self->{Out} }
+		}
+	    }
+	    else {
+		putfile $InFile, $self->{Out};
+		chmod $self->{NEW_FILE_MODE}, $InFile if defined $self->{NEW_FILE_MODE};
+	    }
+	}
+	elsif (defined $self->{NEW_FILE_MODE}) {
+	    if (defined $self->{OUTFILE}) { chmod $self->{NEW_FILE_MODE}, $self->{OUTFILE} }
+	    else                  { chmod $self->{NEW_FILE_MODE}, $InFile }
+	}
+    }				# end of while (@args)
 
 }				# end of sub run
 
-########################################################################
-# subroutines
+sub _index {
+    my $str = shift;
+    my $subs = shift;
+    if (ref($subs) eq 'Regexp') {
+	if ($str =~ $subs) { return (length($`),length($&)) }
+	else { return (-1,0) }
+    }
+    else { return (index($str, $subs), length($subs)) }
+}
 
 # $self->{ttype}: -1 EOF
 #             -2 outer text
@@ -194,32 +218,42 @@ sub scan {
     }
     else {
 	my $i1 = length($self->{data}) + 1;
-	my $i2;
+	my $pl=0; my $i2=$i1; my $sl=0;
 	$self->{ttype} = -2;
 	foreach my $ttype (0 .. $#{ $self->{hook} }) {
-	    my $j = index($self->{data}, $self->{hook}->[$ttype]->{'begin'});
+	    my ($j, $pl2, $j2, $sl2);
+	    my ($j,$pl2) = _index($self->{data}, $self->{hook}->[$ttype]->{'begin'});
 	    next unless $j != -1 && $j <= $i1;
+	    my $data2 = substr($self->{data}, $j);
 	    if ($self->{hook}->[$ttype]->{'end'} ne '') {
-		next if -1 == ($i2 = index($self->{data},
-					   $self->{hook}->[$ttype]->{'end'}));
-	    } else { $i2 = length($self->{data}) + 1 }
-	    $i1 = $j; $self->{ttype} = $ttype;
+		($j2, $sl2) = _index($data2, $self->{hook}->[$ttype]->{'end'});
+		next if -1 == $j2;
+		$j2 += $j;
+	    } else { $j2 = length($self->{data}) + 1; $sl2 = 0; }
+	    $i1 = $j; $pl = $pl2; $i2 = $j2; $sl = $sl2; $self->{ttype} = $ttype;
 	}
 
 	if ($self->{ttype}==-2) {$self->{currenttoken}=$self->{data}; $self->{data}=''}
-	elsif ($i1 > 0) {
-	    $self->{currenttoken} = substr($self->{data}, 0, $i1);
-	    $self->{data} = substr($self->{data}, $i1);
-	    $self->{ttype} = -2;
-	} else {
-	    $self->{prefix} = $self->{hook}->[$self->{ttype}]->{'begin'};
-	    $self->{suffix} = $self->{hook}->[$self->{ttype}]->{'end'};
-
-	    my $pl = length($self->{prefix});
-	    my $sl = length($self->{suffix});
+	else {
+	    $self->{Out} .= substr($self->{data}, 0, $i1); # just copy type -2
+                            # instead of returning as earlier, to
+	                    # support negative look-back for prefix
+	    $self->{prefix} = substr($self->{data}, $i1, $pl);
 	    $self->{currenttoken} = substr($self->{data}, $i1+$pl, $i2-$i1-$pl);
+	    $self->{suffix} = substr($self->{data}, $i2, $sl);
 	    $self->{data} = substr($self->{data}, $i2+$sl);
 	}
+	# vlado: this should be delete at some point, 2006-02-25
+	#elsif ($i1 > 0) {
+	#    $self->{currenttoken} = substr($self->{data}, 0, $i1);
+	#    $self->{data} = substr($self->{data}, $i1);
+	#    $self->{ttype} = -2;
+	#} else {
+	#    $self->{prefix} = substr($self->{data}, 0, $pl);
+	#    $self->{currenttoken} = substr($self->{data}, $i1+$pl, $i2-$i1-$pl);
+	#    $self->{suffix} = substr($self->{data}, $i2, $sl);
+	#    $self->{data} = substr($self->{data}, $i2+$sl);
+	#}
     }
 
     return $self->{ttype};
@@ -232,7 +266,12 @@ sub eval1 {
     my $code = shift;
     my $comment = shift;
     eval("package main; no strict; $code");
-    if ($@) { _croak("$comment code error:$@\ncode:$code") }
+    if ($@) {
+	my ($code1, $linecnt);
+	foreach (split(/\n/, $code))
+	{ ++$linecnt; $code1 .= sprintf("%03d %s\n", $linecnt, $_); }
+	_croak("$comment code error:$@\ncode:\n$code1");
+    }
 }
 
 ########################################################################
@@ -260,6 +299,34 @@ sub evaluate {
     # $self->{hook}->[0] is reserved for output pieces
     #
     if ($::O ne '') { $suf.="$self->{hook}->[0]->{'begin'}$::O$self->{hook}->[0]->{'end'}" }
+    return "$pref$c$suf";
+}
+
+# Python-specific evaluator
+sub evaluate_py {
+    my $self = shift;
+
+    my $pref = shift;
+    my $code = shift; my $c = $code;
+    my $suf = shift;
+    if (defined($self->{CodePreparation}) && $self->{CodePreparation}) {
+	local $_=$code;
+	$self->eval1($self->{CodePreparation},'preprocessing');
+	$code = $_;
+    }
+
+    # Evaluate code, first final preparation and then eval1
+    $::O = '';
+    $::Star = $self;
+    $self->eval1($code, 'snippet');
+ 
+    if ($self->{REPLACE}) { return $::O }
+    if ($::O ne '') {
+	my $indent = '';
+	if ($c =~ /^(\s+)#/m) { $indent = $1 }
+	$suf .= "\n".$indent."#+\n".$::O.
+	        "\n".$indent."#-\n";
+    }
     return "$pref$c$suf";
 }
 
@@ -499,17 +566,14 @@ sub unwrap {
 }
 
 sub setGlobStyle {
-    my $self = shift; die "(".ref($self).")" unless ref($self) eq
-	'Text::Starfish';
-
+    my $self = shift;
     my $s = shift;
     $self->{STYLE} = $s;
     $self->setStyle($s);
 }
 
 sub setStyle {
-    my $self = shift; die "(".ref($self).")" unless ref($self) eq
-	'Text::Starfish';
+    my $self = shift;
 
     my $s = shift;
     if ($s eq 'latex' or $s eq 'TeX') {	$s = 'tex' }
@@ -538,6 +602,14 @@ sub setStyle {
 	       {begin => '<?', end => "!>\n", f => \&evaluate }];
 	$self->{CodePreparation} = 's/\\n(?:#|%+|\/\/+)/\\n/g';
     }
+    elsif ($s eq 'python') {
+	$self->{hook} =
+	    [{begin => qr/\n\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return''}}, # Reserved for output
+	     {begin => '<?', end => '!>', f => \&evaluate_py },
+	     {begin => '<?starfish', end => '?>', f => \&evaluate_py }
+	     ];
+	$self->{CodePreparation} = 's/\\n\\s*#/\\n/g';
+    }
     elsif ($s eq 'html') {
 	undef $self->{LineComment};
 	$self->{hook}=[{begin => "\n<!-- + -->\n", end=>"\n<!-- - -->\n",   # Reserved for output
@@ -555,7 +627,7 @@ sub setStyle {
 	       {begin => '<?', end => '!>', f => \&evaluate }];
 	$self->{CodePreparation} = 's/\\n%/\\n/g';
     }
-    else { die "starfish:setStyle:unknown style:$s" }
+    else { _croak("setStyle:unknown style:$s") }
     $self->{Style} = $s;
 }
 
@@ -569,6 +641,16 @@ sub addHook {
     { push @Hook, {begin=>$p, end=>$s, f=>\&evaluate} }
     elsif ($fun eq 'ignore')
     { push @Hook, {begin=>$p, end=>$s, f=>\&eval_ignore} }
+    elsif (ref($fun) eq 'CODE') {
+	push @Hook, {begin=>$p, end=>$s,
+		     f=> sub { local $_; my $self=shift;
+			       my $p=shift; $_=shift; my $s=shift;
+			       &$fun($p,$_,$s);
+			       if ($self->{REPLACE}) { return $_ }
+			       return "$p$_$s";
+			   }
+		 };
+    }
     else {
 	eval("push \@Hook, {begin=>\$p, end=>\$s,".
 	     "f=>sub{\n".
@@ -594,6 +676,11 @@ sub rmHook {
 	else { push @Hook1, $h }
     }
     $self->{hook} = \@Hook1;
+}
+
+sub rmAllHooks {
+    my $self = shift;
+    $self->{hook} = [];
 }
 
 sub defineMacros {
@@ -742,6 +829,12 @@ sub read_records($ ) {
       push @{ $db }, $r;
   }
   return wantarray ? @{$db} : $db;
+}
+
+sub last_update() {
+    my $self = @_ ? shift : $::Star;
+    if ($self->{Loops} < 2) { $self->{Loops} = 2 }
+    return POSIX::strftime("%d-%b-%Y", localtime($self->{LastUpdateTime}));
 }
 
 sub file_modification_time() {
@@ -1121,24 +1214,62 @@ Name of the current input file.
 
 Adds a new hook. The parameter $p is the starting delimiter, $s is the
 ending delimiter, and $f is the evaluator.
+The parameters $p and $s can be either strings, which are matched
+exactly, or regular expressions.  An empty ending delimiter will match
+the end of the input.
 There are several different ways of providing $f:
 
 =over 5
 
-=item special string 'default', in which case the default Starfish
- evaluator is used,
+=item special string 'default'
 
-=item special string 'ignore', equivalent to producing no echo,
+in which case the default Starfish evaluator is used,
 
-=item other strings are interpreted as code which is embedded in an
+=item special string 'ignore'
+
+equivalent to producing no echo,
+
+=item other strings
+
+are interpreted as code which is embedded in an
     evaluator by providing a local $_, $self which is the current
     Starfish object, $p - the prefix, and $s the suffix.
-    After executing the code $p.$_.$s is returned.
+    After executing the code $p.$_.$s is returned, unless in the
+    replacement mode, in which $_ is returned.
+
+=item code reference (sub {...})
+
+is interpreted as code which is embedded in an evaluator.  The local 
+$_ provides the captured string and it is to be replaced with the
+result.  Three arguments are also provided to the code: $p - the
+prefix, $_, and $s - the suffix.
+
+=back
+
+=head2 $o->last_update() 
+
+Or just last_update(), returns the date of the last update of the
+output.
 
 =head2 $o->rmHook($p,$s)
 
 Removes a hook specified by the starting delimiter $p, and the ending
 delimiter $s.
+
+=head2 $o->rmAllHooks()
+
+Removes all hooks.  If no hooks are added, then after exiting the
+current snippet it will not be possible to detect another snippet
+later.  A typical usage could be as follows:
+
+    $Star->rmAllHooks();
+    $Star->addHook('<?starfish ','?>', 'default');
+
+=head2 $o->setStyle($s)
+
+Sets a particular style of the source file.  Currently implemented
+options are: html, java, latex, makefile, perl, ps, python, TeX, and
+tex.
 
 =head1 PREDEFINED FUNCTIONS
 
@@ -1236,7 +1367,7 @@ I'd like to thank Steve Yeago for comments.
 
 =head1 AUTHOR
 
-Copyright 2001-2005 Vlado Keselj www.cs.dal.ca/~vlado
+Copyright 2001-2006 Vlado Keselj www.cs.dal.ca/~vlado
 
 This script is provided "as is" without expressed or implied warranty.
 This is free software; you can redistribute it and/or modify it under
@@ -1298,4 +1429,4 @@ it is a larger system with the design objective being a
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.33 2005/05/04 03:07:06 vlado Exp $
+# $Id: Starfish.pm,v 3.43 2006/02/26 00:29:36 vlado Exp $

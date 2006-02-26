@@ -32,3 +32,13 @@ Revision history for Perl extension Text::Starfish.
 
 1.02  Wed May  4 00:06:38 ADT 2005
 	- addHook updated to consider REPLACE option
+
+1.03  Sat Feb 25 20:13:35 AST 2006
+	- started support for Python
+	- allow begin and end to be regexes, using _index
+	- better code snippet error reporting (line numbers)
+	- introduced last_update
+	- added function rmAllHooks
+	- improved scanning to support lookback in prefix
+	  specification
+	- added code as $f argument in the addHook method

@@ -6,4 +6,17 @@ Ignore example
 
 
 
+
+
+line
+teststart>>.arg*.<<testend
+teststart>>.arg*1.<<testend
+teststart>>.arg*2.<<testend
+
+
+
+t1start>>.new arg.<<t1end
+t1start>>.new arg2.<<t1end
+t1start>>.new arg3.<<t1end
+
 </BODY>

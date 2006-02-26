@@ -7,4 +7,17 @@ Ignore example
 
 #ignore this
 
+<!--<? $Star->addHook(qr{(?<=\n)#sd!/},qr{/(?=\n)}, '$_="teststart>>.$_.<<testend"') !>-->
+
+line
+#sd!/arg*/
+#sd!/arg*1/
+#sd!/arg*2/
+
+<!--<? $Star->addHook(qr{(?<=\n)#sd1!/},qr{/(?=\n)}, sub { $_="t1start>>.$_.<<t1end" }) !>-->
+
+#sd1!/new arg/
+#sd1!/new arg2/
+#sd1!/new arg3/
+
 </BODY>

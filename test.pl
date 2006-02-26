@@ -96,6 +96,11 @@ chdir 'tmp' or die;
     # 23
     &testcase(22);    
 
+    # 24
+    `cp ../testfiles/24.py 24.py`;
+    `./starfish 24.py`;
+    okfiles('../testfiles/24.py.out', '24.py');
+
 sub okfiles {
     my $f1 = shift;
     while (@_) {

@@ -31,6 +31,8 @@ testfiles/22_html.in
 testfiles/22_html.out
 testfiles/22.in
 testfiles/22.out
+testfiles/24.py
+testfiles/24.py.out
 testfiles/3.in
 testfiles/3.out
 testfiles/4.in
