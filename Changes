@@ -16,7 +16,7 @@ Revision history for Perl extension Text::Starfish.
 	- consider wantarray in read_records
 	- minor bugs
 	- read_starfish_conf executes each starfish.conf in the
-	  approapriate directory
+	  appropriate directory
 	- documentation improvement
 
 1.01  Tue May  3 00:38:19 ADT 2005
@@ -42,3 +42,19 @@ Revision history for Perl extension Text::Starfish.
 	- improved scanning to support lookback in prefix
 	  specification
 	- added code as $f argument in the addHook method
+
+1.04  Fri May 18 07:52:58 ADT 2007
+	- documentation improvement
+	- makefile style improved to include indentation, similarly
+	  to Python; improved Python indentation in the case of
+	  one-line embedded code.
+	- Python style improvements
+	- finally intorduced proper regex hooks, should replace begin
+	  and end
+	- the method name Text::Starfish->run changed to process_files
+	- added starfishfile function; simplifies starfish script and
+ 	  makes Perl-inline use of starfish easier
+	- intoduced function digest, which operates on text units,
+	  which are normally files
+	- OUTFILE internal vs external check
+	- added include function

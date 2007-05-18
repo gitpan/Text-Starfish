@@ -1,7 +1,10 @@
---- #YAML:1.0
-name: Text-Starfish
-abstract: Perl-based System for Text-Embedded Programming and Preprocessing
-version: 1.03
-authored_by:
-  - Vlado Keselj www.cs.dal.ca/~vlado
-license: perl
+# http://module-build.sourceforge.net/META-spec.html
+#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
+name:         Text-Starfish
+version:      1.04
+version_from: Starfish.pm
+installdirs:  site
+requires:
+
+distribution_type: module
+generated_by: ExtUtils::MakeMaker version 6.30

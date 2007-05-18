@@ -33,6 +33,11 @@ testfiles/22.in
 testfiles/22.out
 testfiles/24.py
 testfiles/24.py.out
+testfiles/25_Makefile
+testfiles/25_Makefile.out
+testfiles/26-out.html
+testfiles/26_include_example.html
+testfiles/26_include_example1.html
 testfiles/3.in
 testfiles/3.out
 testfiles/4.in

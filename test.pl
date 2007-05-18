@@ -14,7 +14,7 @@ mkdir 'tmp/Text', 0700 unless -d 'tmp/Text';
 
 {
     my $f = getfile('starfish');
-    $f =~ s{^#!/usr/bin/perl -s}{#!/usr/bin/perl -s -I../blib/lib} or die;
+    $f =~ s{^#!/usr/bin/perl}{#!/usr/bin/perl -I../blib/lib} or die;
     putfile('tmp/starfish', $f);
     `chmod u+x tmp/starfish`;
 }
@@ -101,11 +101,22 @@ chdir 'tmp' or die;
     `./starfish 24.py`;
     okfiles('../testfiles/24.py.out', '24.py');
 
+    # 25
+    `cp ../testfiles/25_Makefile Makefile`;
+    `./starfish Makefile`;
+    okfiles('../testfiles/25_Makefile.out', 'Makefile');
+
+    # 26
+    `cp ../testfiles/26_include_example.html 26_include_example.html`;
+    `cp ../testfiles/26_include_example1.html 26_include_example1.html`;
+    `./starfish -replace -o=26-out.html 26_include_example.html`;
+    okfiles('../testfiles/26-out.html', '26-out.html');
+
 sub okfiles {
     my $f1 = shift;
     while (@_) {
 	my $f2 = shift;
-	ok(getfile($f1), getfile($f2));
+	ok(getfile($f2), getfile($f1));
     }
 }
 

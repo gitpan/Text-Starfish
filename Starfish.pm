@@ -1,6 +1,6 @@
-# (c) 2001-2006 Vlado Keselj www.cs.dal.ca/~vlado
+# (c) 2001-2007 Vlado Keselj http://www.cs.dal.ca/~vlado
 #
-# Starfish.pm and starfish - a Perl-based System for Text-Embedded
+# Starfish - A Perl-based System for Text-Embedded
 #     Programming and Preprocessing
 #
 # See the documentation following the code.  You can also use the
@@ -16,31 +16,33 @@ require Exporter;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
 our @ISA = qw(Exporter);
 
-our %EXPORT_TAGS = ( 'all' => [ qw() ] );
+our %EXPORT_TAGS = ( 'all' => [qw( appendfile echo file_modification_date 
+				   file_modification_time getfile
+				   getmakefilelist
+				   get_verbatim_file include
+				   last_update putfile
+				   read_starfish_conf starfishfiles ) ] );
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-our @EXPORT = qw(echo file_modification_date file_modification_time
-		 read_starfish_conf last_update);
-our $VERSION = '1.03';
+our @EXPORT = @{ $EXPORT_TAGS{'all'} };
+our $VERSION = '1.04';
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 3.43 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.54 $, 10)) =~ s/\s+$//;
 
 use vars @EXPORT_OK;
 
-# non-exported package globals go here
-use vars qw();
+# non-exported package globals
+use vars qw($GlobalREPLACE);
 
-# exported stuff (this should be handled by Exporter, but for some reason
-# it does not work as it should.
-sub echo($@);       sub main::echo($@);       *::echo = \&echo;
-sub getfile($ );    sub main::getfile($ );    *::getfile = \&getfile;
-sub putfile($@);    sub main::putfile($@);    *::putfile = \&putfile;
-sub appendfile($@); sub main::appendfile($@); *::appendfile = \&appendfile;
-sub getmakefilelist($$); sub main::getmakefilelist($$);
-                                     *::getmakefilelist = \&getmakefilelist;
-sub htmlquote($);   sub main::htmlquote($);   *::htmlquote = \&htmlquote;
-sub read_records($); sub main::read_records($); *::read_records = \&read_records;
+sub appendfile($@);
+sub getfile($ );
+sub getmakefilelist($$);
+sub htmlquote($ );
+sub putfile($@);
+sub read_records($ );
+sub starfishfile($ );
+sub include($@);
 
 sub new {
     my $proto = shift;
@@ -62,15 +64,50 @@ sub new {
     return $self;
 }
 
-sub run {
+sub starfishfiles(@) {
+    my $sf = Text::Starfish->new();
+    my @tmp = ();
+    foreach (@_) {
+	if    (/^-o=/)       { $sf->{OUTFILE}      = $' }
+	elsif (/^-e=?/)      { $sf->{INITIAL_CODE} = $' }
+	elsif (/^-replace$/) { $sf->{REPLACE} = $GlobalREPLACE = 1 }
+	elsif (/^-mode=/)    { $sf->{NEW_FILE_MODE} = $' }
+	else { push @tmp, $_ }
+    }
+
+    if (defined $sf->{NEW_FILE_MODE} and $sf->{NEW_FILE_MODE} =~ /^0/)
+    { $sf->{NEW_FILE_MODE} = oct($sf->{NEW_FILE_MODE}) }
+
+    $sf->process_files(@tmp);
+    return $sf;
+}
+
+sub include($@) {
+    my $sf = Text::Starfish->new();
+    $sf->{INFILE}  = shift @_;
+    $sf->{REPLACE} = 1;
+    my $require = '';
+    foreach (@_) {
+	if    (/^-replace$/)   { $sf->{REPLACE} = 1 }
+	elsif (/^-noreplace$/) { $sf->{REPLACE} = '' }
+	elsif (/^-require$/) { $require = 1 }
+	else { _croak("unknown include option: $_") }
+    }
+
+    if ($sf->{INFILE} eq '' or ! -r $sf->{INFILE} ) {
+	if ($require) { _croak("cannot include file: ($sf->{INFILE})") }
+	return '';
+    }
+
+    $sf->setStyle();
+    $sf->{data} = getfile $sf->{INFILE};
+    $sf->digest();
+    return $sf->{Out};
+}
+
+sub process_files {
     my $self = shift;
     my @args = @_;
-
-    # @GlobHook = ();
-
-    if (defined $self->{NEW_FILE_MODE}) {
-	$self->{NEW_FILE_MODE} = oct($self->{NEW_FILE_MODE}) if $self->{NEW_FILE_MODE} =~ /^0/;
-    }
 
     if (defined $self->{REPLACE} and !defined $self->{OUTFILE})
     { _croak("Starfish:output file required for replace") }
@@ -82,33 +119,16 @@ sub run {
 
     while (@args) {
 	$self->{INFILE} = shift @args;
-	my $InFile = $self->{INFILE};
 	++$FileCount;
 
-	$self->{CurrentLoop} = 1;
-	if (!defined $self->{STYLE}) {
-	    my $f = $InFile;
-	    $f =~ s/\.s(tar)?fish$//;
-	    if    ($f =~ /\.html?/i)       { $self->setStyle('html') }
-	    elsif ($f =~ /\.(?:la)?tex$/i) { $self->setStyle('tex') }
-	    elsif ($f =~ /\.java$/i)       { $self->setStyle('java') }
-	    elsif ($f =~ /^[Mm]akefile/)   { $self->setStyle('makefile') }
-	    elsif ($f =~ /\.ps$/i)         { $self->setStyle('ps') }
-	    elsif ($f =~ /\.py$/i)         { $self->setStyle('python') }
-	    else { $self->setStyle('perl') }
-	} else { $self->setStyle($self->{STYLE}) }
-
-	undef $self->{macrosdefine};
-	undef $self->{Macros};
-	undef $self->{ForbidMacro};
-
-	# take all data into $self->{data}
-	$self->{data} = getfile $InFile;
+	# *123* we need to forbid defining an outfile externally as well as
+        # internally:
+	my $outfileExternal = exists($self->{OUTFILE}) ? $self->{OUTFILE} : '';
 
 	my $ExistingText;
 	if (! defined $self->{OUTFILE}) {
 	    $ExistingText = $self->{data};
-	    $self->{LastUpdateTime} = (stat $InFile)[9];
+	    $self->{LastUpdateTime} = (stat $self->{INFILE})[9];
 	}
 	elsif ($FileCount > 1)  {
 	    $ExistingText = '';
@@ -123,38 +143,16 @@ sub run {
 	    $self->{LastUpdateTime} = (stat $self->{OUTFILE})[9];
 	}
 
-      START:
-	$self->{Out} = '';
-	$self->scan();
-	while ($self->{ttype} != -1) {
-	    if ($self->{ttype} > -1 ) {	                        # call evaluator
-		$self->{Out}.= &{$self->{hook}->[$self->{ttype}]->{f}}
-		( $self, $self->{prefix}, $self->{currenttoken}, $self->{suffix});
-	    }
-	    else { $self->{Out}.=$self->{currenttoken} }
-	    $self->scan();
-	}
+	$self->setStyle();
+	$self->{data} = getfile $self->{INFILE};
+	$self->digest();
 
-	if ($self->{CurrentLoop} < $self->{Loops}) {
-	    ++$self->{CurrentLoop};
-	    $self->{data} = $self->{Out};
-	    if ($ExistingText ne $self->{Out})
-	    { $self->{LastUpdateTime} = time }
-	    goto START;
-	}
+	# see *123* above
+	if ($outfileExternal ne '' and $outfileExternal ne $self->{OUTFILE})
+	{ _croak("OUTFILE defined externally ($outfileExternal) and ".
+		 "internally ($self->{OUTFILE})") }
 
-	if (defined $self->{macrosdefined}) {
-	    my ($m, $s);
-	    while (($m,$s) = each %{$self->{Macros}}) {
-		if ($s =~ /\n/) {
-		    my $p1 = "$`$&"; $s = $';
-		    if ($s) { $s = $p1.wrap($s) }
-		    else { $s = $p1 }
-		}
-		$self->{Out}.= $self->{MprefAuxDefine}.$s.$self->{MsufAuxDefine};
-	    }
-	}
-
+	my $InFile = $self->{INFILE};
 	if ($FileCount==1 && defined $self->{OUTFILE}) {
 	    # touch the outfile if it does not exist
 	    if ( ! -f $self->{OUTFILE} ) {
@@ -194,7 +192,49 @@ sub run {
 	}
     }				# end of while (@args)
 
-}				# end of sub run
+}				# end of method process_files
+
+sub digest {
+    my $self = shift;
+    $self->{CurrentLoop} = 1;
+    my $savedcontent = $self->{data};
+
+  START:			# The main scanning loop
+    $self->{Out} = '';
+    $self->scan();
+    while ($self->{ttype} != -1) {
+	if ($self->{ttype} > -1 && @{$self->{args}}) { # call evaluator
+	    $self->{Out}.= &{$self->{hook}->[$self->{ttype}]->{replace}}
+	    ( $self, @{ $self->{args} } );
+	}
+	elsif ($self->{ttype} > -1 ) {                 # call evaluator
+	    $self->{Out}.= &{$self->{hook}->[$self->{ttype}]->{f}}
+	    ( $self, $self->{prefix}, $self->{currenttoken}, $self->{suffix});
+	}
+	else { $self->{Out}.=$self->{currenttoken} }
+	$self->scan();
+    }
+    
+    if ($self->{CurrentLoop} < $self->{Loops}) {
+	++$self->{CurrentLoop};
+	$self->{data} = $self->{Out};
+	if ($savedcontent ne $self->{Out})
+	{ $self->{LastUpdateTime} = time }
+	goto START;
+    }
+    
+    if (defined $self->{macrosdefined}) {
+	my ($m, $s);
+	while (($m,$s) = each %{$self->{Macros}}) {
+	    if ($s =~ /\n/) {
+		my $p1 = "$`$&"; $s = $';
+		if ($s) { $s = $p1.wrap($s) }
+		else { $s = $p1 }
+	    }
+	    $self->{Out}.= $self->{MprefAuxDefine}.$s.$self->{MsufAuxDefine};
+	}
+    }
+}
 
 sub _index {
     my $str = shift;
@@ -210,6 +250,7 @@ sub _index {
 #             -2 outer text
 sub scan {
     my $self = shift;
+    my ($newOut, $newData);
 
     $self->{prefix} = $self->{suffix} = '';
     if ($self->{data} eq '') {	# no more data, EOF
@@ -217,23 +258,45 @@ sub scan {
 	$self->{currenttoken} = '';
     }
     else {
-	my $i1 = length($self->{data}) + 1;
+	my $i1 = length($self->{data}) + 1;   # length to token start
 	my $pl=0; my $i2=$i1; my $sl=0;
 	$self->{ttype} = -2;
 	foreach my $ttype (0 .. $#{ $self->{hook} }) {
 	    my ($j, $pl2, $j2, $sl2);
-	    my ($j,$pl2) = _index($self->{data}, $self->{hook}->[$ttype]->{'begin'});
-	    next unless $j != -1 && $j <= $i1;
-	    my $data2 = substr($self->{data}, $j);
-	    if ($self->{hook}->[$ttype]->{'end'} ne '') {
-		($j2, $sl2) = _index($data2, $self->{hook}->[$ttype]->{'end'});
-		next if -1 == $j2;
-		$j2 += $j;
-	    } else { $j2 = length($self->{data}) + 1; $sl2 = 0; }
-	    $i1 = $j; $pl = $pl2; $i2 = $j2; $sl = $sl2; $self->{ttype} = $ttype;
+	    if (exists($self->{hook}->[$ttype]->{'begin'})) {
+		($j,$pl2) = _index($self->{data}, $self->{hook}->[$ttype]->{'begin'});
+		next unless $j != -1 && $j < $i1;
+		my $data2 = substr($self->{data}, $j);
+		if ($self->{hook}->[$ttype]->{'end'} ne '') {
+		    ($j2, $sl2) = _index($data2, $self->{hook}->[$ttype]->{'end'});
+		    next if -1 == $j2;
+		    $j2 += $j;
+		} else { $j2 = length($self->{data}) + 1; $sl2 = 0; }
+		$i1 = $j; $pl = $pl2; $i2 = $j2; $sl = $sl2;
+		$self->{ttype} = $ttype;
+		$self->{args} = [];
+	    } else {
+		my @args = ($self->{data} =~ $self->{hook}->[$ttype]->{regex});
+		next unless @args;
+		my $j = length($`);
+		next unless $j < $i1;
+		$i1 = $j;
+		unshift @args, $&;
+		$self->{prefix} = '';
+		$self->{currenttoken} = $&;
+		$self->{suffix} = '';
+		$self->{ttype} = $ttype;
+		$self->{args} = \@args;
+		$newOut .= $self->{Out}.$`;
+		$newData = $';
+	    }
 	}
 
 	if ($self->{ttype}==-2) {$self->{currenttoken}=$self->{data}; $self->{data}=''}
+        elsif (@{$self->{args}}) {
+	    $self->{Out} = $newOut;
+	    $self->{data} = $newData;
+	}
 	else {
 	    $self->{Out} .= substr($self->{data}, 0, $i1); # just copy type -2
                             # instead of returning as earlier, to
@@ -243,17 +306,6 @@ sub scan {
 	    $self->{suffix} = substr($self->{data}, $i2, $sl);
 	    $self->{data} = substr($self->{data}, $i2+$sl);
 	}
-	# vlado: this should be delete at some point, 2006-02-25
-	#elsif ($i1 > 0) {
-	#    $self->{currenttoken} = substr($self->{data}, 0, $i1);
-	#    $self->{data} = substr($self->{data}, $i1);
-	#    $self->{ttype} = -2;
-	#} else {
-	#    $self->{prefix} = substr($self->{data}, 0, $pl);
-	#    $self->{currenttoken} = substr($self->{data}, $i1+$pl, $i2-$i1-$pl);
-	#    $self->{suffix} = substr($self->{data}, $i2, $sl);
-	#    $self->{data} = substr($self->{data}, $i2+$sl);
-	#}
     }
 
     return $self->{ttype};
@@ -290,19 +342,20 @@ sub evaluate {
   	}
 
     # Evaluate code, first final preparation and then eval1
-    $::O = '';
-    $::Star = $self;
+    local $::Star = $self;
+    local $::O = '';
     $self->eval1($code, 'snippet');
  
     if ($self->{REPLACE}) { return $::O }
     #
     # $self->{hook}->[0] is reserved for output pieces
     #
-    if ($::O ne '') { $suf.="$self->{hook}->[0]->{'begin'}$::O$self->{hook}->[0]->{'end'}" }
+    if ($::O ne '')
+    { $suf.="$self->{hook}->[0]->{'begin'}$::O$self->{hook}->[0]->{'end'}" }
     return "$pref$c$suf";
 }
 
-# Python-specific evaluator
+# Python-specific evaluator (used also for makefile style)
 sub evaluate_py {
     my $self = shift;
 
@@ -316,18 +369,53 @@ sub evaluate_py {
     }
 
     # Evaluate code, first final preparation and then eval1
-    $::O = '';
-    $::Star = $self;
+    local $::Star = $self;
+    local $::O = '';
     $self->eval1($code, 'snippet');
  
     if ($self->{REPLACE}) { return $::O }
     if ($::O ne '') {
 	my $indent = '';
-	if ($c =~ /^(\s+)#/m) { $indent = $1 }
-	$suf .= "\n".$indent."#+\n".$::O.
+	if ($pref =~ /^(\s+)#/) { $indent = $1 }
+	elsif ($c =~ /^(\s+)#/m) { $indent = $1 }
+	$suf .= $indent."#+\n".$::O.
 	        "\n".$indent."#-\n";
     }
     return "$pref$c$suf";
+}
+
+#{regex => qr/([ \t]*)#<\?(.*?)!>\n(#+\n.*?\n#-\n)?/, replace=>\&evaluate_py1},
+# Python-specific evaluator (used also for makefile style)
+sub evaluate_py1 {
+    my $self = shift;
+    my $allmatch = shift;
+    my $indent = shift;
+    my $code = shift; my $c = $code;
+    my $oldout = shift;
+
+    if (defined($self->{CodePreparation}) && $self->{CodePreparation}) {
+	local $_=$code;
+	$self->eval1($self->{CodePreparation},'preprocessing');
+	$code = $_;
+    }
+
+    # Evaluate code, first final preparation and then eval1
+    local $::O = '';
+    local $::Star = $self;
+    $self->eval1($code, 'snippet');
+ 
+    #if ($self->{REPLACE}) { return $::O }
+    if ($self->{REPLACE}) { return $indent.$::O }
+    elsif ($::O eq '') { return $indent."#<?$c!>\n" }
+    else {
+	return $indent."#<?$c!>\n$indent#+\n".$::O."\n$indent#-\n";
+# 	my $indent = '';
+# 	if ($pref =~ /^(\s+)#/) { $indent = $1 }
+# 	elsif ($c =~ /^(\s+)#/m) { $indent = $1 }
+# 	$suf .= $indent."#+\n".$::O.
+# 	        "\n".$indent."#-\n";
+    }
+#    return "$pref$c$suf";
 }
 
 # a predefined evaluator
@@ -575,6 +663,22 @@ sub setGlobStyle {
 sub setStyle {
     my $self = shift;
 
+    if ($#_ == -1) {
+	if (defined $self->{STYLE}) { $self->setStyle($self->{STYLE}) }
+	else {
+	    my $f = $self->{INFILE};
+	    $f =~ s/\.s(tar)?fish$//;
+	    if    ($f =~ /\.html?/i)       { $self->setStyle('html') }
+	    elsif ($f =~ /\.(?:la)?tex$/i) { $self->setStyle('tex') }
+	    elsif ($f =~ /\.java$/i)       { $self->setStyle('java') }
+	    elsif ($f =~ /^[Mm]akefile/)   { $self->setStyle('makefile') }
+	    elsif ($f =~ /\.ps$/i)         { $self->setStyle('ps') }
+	    elsif ($f =~ /\.py$/i)         { $self->setStyle('python') }
+	    else { $self->setStyle('perl') }
+	}
+	return;
+    }
+
     my $s = shift;
     if ($s eq 'latex' or $s eq 'TeX') {	$s = 'tex' }
     if ($s eq $self->{Style}) { return }
@@ -589,7 +693,17 @@ sub setStyle {
     $self->{CodePreparation} = 's/\\n(?:#|%|\/\/+)/\\n/g';
 
     if ($s eq 'perl') { }
-    elsif ($s eq 'makefile') { }
+    elsif ($s eq 'makefile') {
+	$self->{hook} = [
+	     {regex => qr/([\ \t]*)\#<\?([\000-\377]*?)!>\n
+                          ([\ \t]*\#+\n[\000-\377]*?\n[\ \t]*\#-\n)?/x, replace=>\&evaluate_py1},
+	     {begin => qr/^\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return""}}, # Reserved for output
+	     {begin => qr/[ \t]*#[ \t]*<\?/, end => "!>\n", f => \&evaluate_py },
+	     {begin => '<?', end => "!>\n", f => \&evaluate_py },
+	     {begin => '<?starfish', end => "?>\n", f => \&evaluate_py }
+	    ];
+	$self->{CodePreparation} = 's/\\n\\s*#/\\n/g';
+    }
     elsif ($s eq 'java') {
 	$self->{LineComment} = '//';
 	$self->{hook} = [{begin => "//+\n", end=>"//-\n", f=>sub{return''}},  # Reserved for output
@@ -604,9 +718,14 @@ sub setStyle {
     }
     elsif ($s eq 'python') {
 	$self->{hook} =
-	    [{begin => qr/\n\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return''}}, # Reserved for output
-	     {begin => '<?', end => '!>', f => \&evaluate_py },
-	     {begin => '<?starfish', end => '?>', f => \&evaluate_py }
+	    [{begin => qr/^\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return""}}, # Reserved for output
+	     {begin => qr/[ \t]*#[ \t]*<\?/, end => "!>\n", f => \&evaluate_py },
+	     {begin => '<?', end => "!>\n", f => \&evaluate_py },
+	     {begin => '<?starfish', end => "?>\n", f => \&evaluate_py }
+# 	    [{begin => qr/\n\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return''}}, # Reserved for output
+# 	     {begin => qr/[ \t]*#[ \t]*<\?/, end => '!>', f => \&evaluate_py },
+# 	     {begin => '<?', end => '!>', f => \&evaluate_py },
+# 	     {begin => '<?starfish', end => '?>', f => \&evaluate_py }
 	     ];
 	$self->{CodePreparation} = 's/\\n\\s*#/\\n/g';
     }
@@ -760,6 +879,28 @@ sub getmakefilelist ($$) {
 
 sub echo($@) { $::O .= join('', @_) }
 
+# used in LaTeX mode to include verbatim textual files
+sub get_verbatim_file {
+    my $f = shift;
+    return "\\begin{verbatim}\n".
+	   untabify(scalar(getfile($f))).
+	   "\\end{verbatim}\n";
+}
+
+sub untabify {
+    local $_ = shift;
+    my ($r, $l);
+    while (/[\t\n]/) {
+	if ($& eq "\n") { $r.="$l$`\n"; $l=''; $_ = $'; }
+	else {
+	    $l .= $`;
+	    $l .= ' ' x (8 - (length($l) & 7));
+	    $_ = $';
+	}
+    }
+    return $r.$l.$_;
+}
+
 sub getfile($) {
     my $f = shift;
     local *F;
@@ -890,22 +1031,31 @@ B<starfish> S<[ B<-o=>I<outputfile> ]> S<[ B<-e=>I<initialcode> ]>
         S<[ B<-replace> ]> S<[ B<-mode=>I<mode> ]> S<I<file>...>
 
 where files usually contain some Perl code, delimited by C<E<lt>?> and
-C<!E<gt>>.
+C<!E<gt>>.  To produce output to be inserted into the file, use
+variable C<$O> or function C<echo>.
 
 =head1 DESCRIPTION
 
 (The documentation is probably not up to date.)
 
 Starfish is a system for Perl-based text-embedded programming and
-preprocessing relying on a unifying regular expression rewriting
+preprocessing, which relies on a unifying regular expression rewriting
 methodology.  If you know Perl and php, you probably know the basic
 idea: embed Perl code inside the text, execute it is some way, and
 interleave the output with the text.   Very similar projects exist and
 some of them are listed in L<"SEE ALSO">.  Starfish is, however,
-unique in several ways.
+unique in several ways.  One important difference between C<starfish>
+and similar programs (e.g. php) is that the output does not
+necessarily replace the code, but it follows the code by default.
+It is attempted with Starfish to provide a universal text-embedded
+programming language, which can be used with different types of
+textual files.
 
 There are two files in this package: a module (Starfish.pm) and a
-small script (starfish) that relies on the module.
+small script (starfish) that provides a command-line interface to the
+module.  The options for the script are described in subsection
+"L<starfishfiles list of file names and options>".
+
 The earlier name of this module was SLePerl (Something Like ePerl),
 but it was changed it to C<starfish> -- sounds better and easier to
 type.  One option was `oyster,' but some people are thinking
@@ -917,14 +1067,6 @@ a text, so the text is equivalent to a shellfish containing pearls.
 A starfish comes by and eats the shellfish...  Unlike a natural
 starfish, this C<starfish> is interested in pearls and does not
 normally touch most of the surrounding meat.
-
-
-An important difference between C<starfish> and similar programs
-(e.g. php) is: the output does not necessarily replace the code, it
-follows the code by default.
-
-To produce output to be inserted into the file, use variable C<$O> or
-function C<echo>.
 
 =head1 EXAMPLES
 
@@ -1160,53 +1302,32 @@ Old macro definition can be overriden by:
   ...
   //m!end
 
-=head1 OPTIONS
-
-=over 5
-
-=item B<-o=>I<outputfile>
-
-specifies an output file.  By default, the input file is used as the
-output file.  If the specified output file is '-', then the output is
-produced to the standard output.
-
-=item B<-e=>I<initialcode>
-
-specifies the initial Perl code to be executed.
-
-=item B<-replace>
-
-will cause the embedded code to be replaced with the output.
-WARNING: Normally used only with B<-o>.
-
-=item B<-mode=>I<mode>
-
-specifies the mode for the output file.  By default, the mode of the
-source file is used (the first one if more outputs are accumulated
-using B<-o>).  If an output file is specified, and the mode is
-specified, then C<starfish> will set temporarily the u+w mode of the
-output file in order to write to that file, if needed.
-
-=back
-
 =head1 PREDEFINED VARIABLES
 
-=over 5
+=head2 $O
 
-=item C<$O>
+After executing a snippet, the contetns of this variable represent the
+snippet output.
 
-After executing a snippet, the contents of this variable are inserted
-into the file.
+=head2 $Star
 
-=item $Star
+More precisely, it is $::Star.  $Star is the Starfish object executing
+the current code snipet (this).  There can be a more such objects
+active at a time, due to executing Starfish from a starfish snippet.
+The name is introduced into the main namespace, which might be a
+questionable decision.
 
-The Starfish object processing this file (this).
-
-=item $Star->{INFILE}
+=head2 $Star->{INFILE}
 
 Name of the current input file.
 
-=back
+=head2 $Star->{Out}
+
+Output content of the current processing unit.  For example, to use
+#-style line comments in the replace Starfish mode, one can make a
+final substitution in an HTML file:
+
+ <!--<? $Star->{Out} =~ s/^#.*\n//mg; !>-->
 
 =head1 METHODS
 
@@ -1251,6 +1372,12 @@ prefix, $_, and $s - the suffix.
 Or just last_update(), returns the date of the last update of the
 output.
 
+=head2 $o->process_files(@args)
+
+Similar to the function starfishfiles, but it expects already built
+Starfish object with properly set options.  Actually, starfishfiles
+calls this method after creating the object and returns the object.
+
 =head2 $o->rmHook($p,$s)
 
 Removes a hook specified by the starting delimiter $p, and the ending
@@ -1269,15 +1396,76 @@ later.  A typical usage could be as follows:
 
 Sets a particular style of the source file.  Currently implemented
 options are: html, java, latex, makefile, perl, ps, python, TeX, and
-tex.
+tex.  If the parameter $s is not given, the stile given in
+$o->{STYLE} will be used if defined, otherwise it will be guessed from
+the file name in $o->{INFILE}.  If it cannot be correctly guessed, it
+will be the Perl style.
 
 =head1 PREDEFINED FUNCTIONS
 
+=head2 include( I<filename and options> )
+
+Reads, starfishes the file specified by file name, and returns the
+contents.  Similar to PHP include.  By default, the program will not
+break if the file does not exist.  The option -noreplace will starfish
+file in a non-replace mode.  The default mode is replace and that is
+usually the mode that is needed in includes (non-replace may lead to a
+suprising behaviour, although it should be expected).
+The option -require will cause program to croak if the file does not
+exist.  It is similar to the PHP function require.  A special function
+require is not used since it is a Perl reserved word.
+
+=head2 starfishfiles I<list of file names and options>
+
+The function C<starfishfiles> is called by the script C<starfish> with
+the C<@ARGV> list as the list of arguments.  The function can also be
+used from Perl code to "starfish" a file, e.g.,
+
+    starfish('somefile.txt', '-o=outfile', '-replace');
+
+The arguments of the functions are provided in a similar fashion as
+argument to the command line.  As a reminder, the command usage of the
+script starfish is:
+
+B<starfish> S<[ B<-o=>I<outputfile> ]> S<[ B<-e=>I<initialcode> ]>
+        S<[ B<-replace> ]> S<[ B<-mode=>I<mode> ]> S<I<file>...>
+
+The options are described below:
+
 =over 5
 
-=item B<appendfile> I<filename>, I<list>
+=item B<-o=>I<outputfile>
+
+specifies an output file.  By default, the input file is used as the
+output file.  If the specified output file is '-', then the output is
+produced to the standard output.
+
+=item B<-e=>I<initialcode>
+
+specifies the initial Perl code to be executed.
+
+=item B<-replace>
+
+will cause the embedded code to be replaced with the output.
+WARNING: Normally used only with B<-o>.
+
+=item B<-mode=>I<mode>
+
+specifies the mode for the output file.  By default, the mode of the
+source file is used (the first one if more outputs are accumulated
+using B<-o>).  If an output file is specified, and the mode is
+specified, then C<starfish> will set temporarily the u+w mode of the
+output file in order to write to that file, if needed.
+
+=back
+
+Those were the options.
+
+=head2 appendfile I<filename>, I<list>
 
 appends list elements to the file.
+
+=over 4
 
 =item B<echo>
 
@@ -1356,6 +1544,28 @@ Reads recursively (up the dir tree) configuration files C<starfish.conf>.
 
 =back
 
+=head1 STYLES
+
+There is a set of predefined styles for different input files:
+HTML (html), TeX (tex), Java (java), Makefile (makefile), PostScript
+(ps), Python (python), and Perl (perl).
+
+=head2 Makefile Style (makefile)
+
+The main code hooks are C<<?> and C<>>.
+
+Interestingly, the makefile style has similar special requirements as Python.
+For example, in the following expansion:
+
+ starfish: tmp
+         starfish Makefile
+         #<? if (-e "file.tex.sfish") { echo "\tstarfish -o=tmp/file.tex -replace file.tex.sfish" } !>
+         #+
+         starfish -o=tmp/file.tex -replace file.tex.sfish
+         #-
+
+it is convenient to have the embedded output indented in the same way as the embedded code.
+
 =head1 LIMITATIONS AND BUGS
 
 The script swallows the whole input file at once, so it may not work
@@ -1363,11 +1573,13 @@ on small-memory machines and with huge files.
 
 =head1 THANKS
 
-I'd like to thank Steve Yeago for comments.
+I'd like to thank Steve Yeago, Tony Cox, Tony Abou-Assaleh for
+comments, and Charles Ikeson for suggesting the include function and
+other comments.
 
 =head1 AUTHOR
 
-Copyright 2001-2006 Vlado Keselj www.cs.dal.ca/~vlado
+Copyright 2001-2007 Vlado Keselj http://www.cs.dal.ca/~vlado
 
 This script is provided "as is" without expressed or implied warranty.
 This is free software; you can redistribute it and/or modify it under
@@ -1429,4 +1641,4 @@ it is a larger system with the design objective being a
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.43 2006/02/26 00:29:36 vlado Exp $
+# $Id: Starfish.pm,v 3.54 2007/05/18 10:52:43 vlado Exp $

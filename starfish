@@ -1,17 +1,14 @@
-#!/usr/bin/perl -s
-# (c) 2001-2006 Vlado Keselj www.cs.dal.ca/~vlado
+#!/usr/bin/perl
+# (c) 2001-2007 Vlado Keselj www.cs.dal.ca/~vlado
 #
-# $Id: starfish,v 3.5 2006/02/26 01:40:50 vlado Exp $
+# $Id: starfish,v 3.7 2007/04/09 18:55:39 vlado Exp $
 #
-# starfish - the script for using Starfish.pm
+# starfish - a script for using Starfish.pm
+#
+# The script runs the function starfishfiles with a list of files and
+# options given in the command line.
+#
+# For more documentation, please consult Text::Starfish.pm.
 
 use Text::Starfish;
-
-my $sf = Text::Starfish->new();
-
-$sf->{OUTFILE}       = $o       if defined $o;       undef($o);
-$sf->{INITIAL_CODE}  = $e       if defined $e;       undef($e);
-$sf->{REPLACE}       = $replace if defined $replace; undef($replace);
-$sf->{NEW_FILE_MODE} = $mode    if defined $mode;    undef($mode);
-
-$sf->run(@ARGV);
+starfishfiles(@ARGV);
