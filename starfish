@@ -1,14 +1,14 @@
 #!/usr/bin/perl
 # (c) 2001-2007 Vlado Keselj www.cs.dal.ca/~vlado
 #
-# $Id: starfish,v 3.7 2007/04/09 18:55:39 vlado Exp $
+# $Id: starfish,v 3.8 2007/05/28 16:34:58 vlado Exp $
 #
 # starfish - a script for using Starfish.pm
 #
-# The script runs the function starfishfiles with a list of files and
+# The script runs the function starfish_cmd with a list of files and
 # options given in the command line.
 #
 # For more documentation, please consult Text::Starfish.pm.
 
 use Text::Starfish;
-starfishfiles(@ARGV);
+starfish_cmd(@ARGV);

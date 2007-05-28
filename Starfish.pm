@@ -1,6 +1,6 @@
 # (c) 2001-2007 Vlado Keselj http://www.cs.dal.ca/~vlado
 #
-# Starfish - A Perl-based System for Text-Embedded
+# Starfish - Perl-based System for Text-Embedded
 #     Programming and Preprocessing
 #
 # See the documentation following the code.  You can also use the
@@ -9,28 +9,31 @@
 package Text::Starfish;
 use strict;
 use Carp;
-use Cwd;
+#use Cwd;
+use Exporter;
+#require Exporter;
 use POSIX;
 
-require Exporter;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
 our @ISA = qw(Exporter);
 
-our %EXPORT_TAGS = ( 'all' => [qw( appendfile echo file_modification_date 
-				   file_modification_time getfile
-				   getmakefilelist
-				   get_verbatim_file include
-				   last_update putfile
-				   read_starfish_conf starfishfiles ) ] );
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
+our %EXPORT_TAGS = ( 'all' => [qw(
+  appendfile echo file_modification_date 
+  file_modification_time getfile getmakefilelist get_verbatim_file
+  getinclude include
+  last_update putfile read_records read_starfish_conf starfish_cmd ) ] );
+#our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = @{ $EXPORT_TAGS{'all'} };
-our $VERSION = '1.04';
 
-use vars qw($Version $Revision);
-$Version = $VERSION;
-($Revision = substr(q$Revision: 3.54 $, 10)) =~ s/\s+$//;
+# updated here and in META.yml
+our $NAME     = 'Starfish';
+our $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
+our $VERSION  = '1.05';
 
-use vars @EXPORT_OK;
+use vars qw($Revision);
+($Revision = substr(q$Revision: 3.57 $, 10)) =~ s/\s+$//;
+
+#use vars @EXPORT_OK;
 
 # non-exported package globals
 use vars qw($GlobalREPLACE);
@@ -41,16 +44,14 @@ sub getmakefilelist($$);
 sub htmlquote($ );
 sub putfile($@);
 sub read_records($ );
-sub starfishfile($ );
-sub include($@);
+sub starfish_cmd(@);
 
 sub new {
     my $proto = shift;
     my $class = ref($proto) || $proto;
-    my $self = {};
 
-    # Initialization stuff
-    # e.g. $self->{end} = '';
+    my $self = {};
+    $self->{Loops} = 1;
 
     # These may be set in starfish by command line options
     # no need to initialize
@@ -64,14 +65,15 @@ sub new {
     return $self;
 }
 
-sub starfishfiles(@) {
+sub starfish_cmd(@) {
     my $sf = Text::Starfish->new();
     my @tmp = ();
     foreach (@_) {
-	if    (/^-o=/)       { $sf->{OUTFILE}      = $' }
-	elsif (/^-e=?/)      { $sf->{INITIAL_CODE} = $' }
-	elsif (/^-replace$/) { $sf->{REPLACE} = $GlobalREPLACE = 1 }
+	if    (/^-e=?/)      { $sf->{INITIAL_CODE} = $' }
 	elsif (/^-mode=/)    { $sf->{NEW_FILE_MODE} = $' }
+	elsif (/^-o=/)       { $sf->{OUTFILE}      = $' }
+	elsif (/^-replace$/) { $sf->{REPLACE} = $GlobalREPLACE = 1 }
+        elsif (/^-v$/) { print "$NAME, version $VERSION, $ABSTRACT\n"; exit 0; } 
 	else { push @tmp, $_ }
     }
 
@@ -82,7 +84,9 @@ sub starfishfiles(@) {
     return $sf;
 }
 
-sub include($@) {
+sub include($@) { $::O .= getinclude(@_); return 1; }
+
+sub getinclude($@) {
     my $sf = Text::Starfish->new();
     $sf->{INFILE}  = shift @_;
     $sf->{REPLACE} = 1;
@@ -91,11 +95,11 @@ sub include($@) {
 	if    (/^-replace$/)   { $sf->{REPLACE} = 1 }
 	elsif (/^-noreplace$/) { $sf->{REPLACE} = '' }
 	elsif (/^-require$/) { $require = 1 }
-	else { _croak("unknown include option: $_") }
+	else { _croak("unknown getinclude option: $_") }
     }
 
     if ($sf->{INFILE} eq '' or ! -r $sf->{INFILE} ) {
-	if ($require) { _croak("cannot include file: ($sf->{INFILE})") }
+	if ($require) { _croak("cannot getinclude file: ($sf->{INFILE})") }
 	return '';
     }
 
@@ -113,19 +117,19 @@ sub process_files {
     { _croak("Starfish:output file required for replace") }
 
     my $FileCount=0;
-    $self->{Loops} = 1;
-
     $self->eval1($self->{INITIAL_CODE}, 'initial');
 
     while (@args) {
 	$self->{INFILE} = shift @args;
 	++$FileCount;
+	$self->setStyle();
+	$self->{data} = getfile $self->{INFILE};
 
 	# *123* we need to forbid defining an outfile externally as well as
         # internally:
 	my $outfileExternal = exists($self->{OUTFILE}) ? $self->{OUTFILE} : '';
 
-	my $ExistingText;
+	my $ExistingText = '';
 	if (! defined $self->{OUTFILE}) {
 	    $ExistingText = $self->{data};
 	    $self->{LastUpdateTime} = (stat $self->{INFILE})[9];
@@ -143,8 +147,6 @@ sub process_files {
 	    $self->{LastUpdateTime} = (stat $self->{OUTFILE})[9];
 	}
 
-	$self->setStyle();
-	$self->{data} = getfile $self->{INFILE};
 	$self->digest();
 
 	# see *123* above
@@ -157,8 +159,9 @@ sub process_files {
 	    # touch the outfile if it does not exist
 	    if ( ! -f $self->{OUTFILE} ) {
 		putfile $self->{OUTFILE};
+		my $infile_mode = (stat $InFile)[2];
 		if (defined $self->{NEW_FILE_MODE}) { chmod $self->{NEW_FILE_MODE}, $self->{OUTFILE}}
-		else                      { chmod ((stat $InFile)[2]), $self->{OUTFILE}}
+		else                      { chmod $infile_mode,	$self->{OUTFILE} }
 	    }
 	    elsif  (defined $self->{NEW_FILE_MODE}) { chmod $self->{NEW_FILE_MODE}, $self->{OUTFILE} }
 	}
@@ -315,7 +318,7 @@ sub scan {
 sub eval1 {
     my $self = shift;
 
-    my $code = shift;
+    my $code = shift; $code = '' unless defined $code;
     my $comment = shift;
     eval("package main; no strict; $code");
     if ($@) {
@@ -681,7 +684,7 @@ sub setStyle {
 
     my $s = shift;
     if ($s eq 'latex' or $s eq 'TeX') {	$s = 'tex' }
-    if ($s eq $self->{Style}) { return }
+    if (defined $self->{Style} and $s eq $self->{Style}) { return }
     
     # default
     $self->{'LineComment'} = '#';
@@ -1054,7 +1057,7 @@ textual files.
 There are two files in this package: a module (Starfish.pm) and a
 small script (starfish) that provides a command-line interface to the
 module.  The options for the script are described in subsection
-"L<starfishfiles list of file names and options>".
+"L<starfish_cmd list of file names and options>".
 
 The earlier name of this module was SLePerl (Something Like ePerl),
 but it was changed it to C<starfish> -- sounds better and easier to
@@ -1374,8 +1377,8 @@ output.
 
 =head2 $o->process_files(@args)
 
-Similar to the function starfishfiles, but it expects already built
-Starfish object with properly set options.  Actually, starfishfiles
+Similar to the function starfish_cmd, but it expects already built
+Starfish object with properly set options.  Actually, starfish_cmd
 calls this method after creating the object and returns the object.
 
 =head2 $o->rmHook($p,$s)
@@ -1405,23 +1408,29 @@ will be the Perl style.
 
 =head2 include( I<filename and options> )
 
+Reads, starfishes the file specified by file name, and echos the
+contents.  Similar to PHP include.  Uses getinclude function.
+
+=head2 getinclude( I<filename and options> )
+
 Reads, starfishes the file specified by file name, and returns the
-contents.  Similar to PHP include.  By default, the program will not
-break if the file does not exist.  The option -noreplace will starfish
-file in a non-replace mode.  The default mode is replace and that is
-usually the mode that is needed in includes (non-replace may lead to a
-suprising behaviour, although it should be expected).
-The option -require will cause program to croak if the file does not
-exist.  It is similar to the PHP function require.  A special function
-require is not used since it is a Perl reserved word.
+contents (see also include to echo the content implicitly).
+By default, the program will not break if the file does not exist.
+The option -noreplace will starfish file in a non-replace mode.
+The default mode is replace and that is usually the mode that is
+needed in includes (non-replace may lead to a suprising behaviour,
+although it should be expected).  The option -require will cause
+program to croak if the file does not exist.  It is similar to the PHP
+function require.  A special function require is not used since it is
+a Perl reserved word.
 
-=head2 starfishfiles I<list of file names and options>
+=head2 starfish_cmd I<list of file names and options>
 
-The function C<starfishfiles> is called by the script C<starfish> with
+The function C<starfish_cmd> is called by the script C<starfish> with
 the C<@ARGV> list as the list of arguments.  The function can also be
 used from Perl code to "starfish" a file, e.g.,
 
-    starfish('somefile.txt', '-o=outfile', '-replace');
+    starfish_cmd('somefile.txt', '-o=outfile', '-replace');
 
 The arguments of the functions are provided in a similar fashion as
 argument to the command line.  As a reminder, the command usage of the
@@ -1641,4 +1650,4 @@ it is a larger system with the design objective being a
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.54 2007/05/18 10:52:43 vlado Exp $
+# $Id: Starfish.pm,v 3.57 2007/05/28 16:34:58 vlado Exp $

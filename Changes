@@ -58,3 +58,9 @@ Revision history for Perl extension Text::Starfish.
 	  which are normally files
 	- OUTFILE internal vs external check
 	- added include function
+
+1.05  Mon May 28 13:34:26 ADT 2007
+	- minor bug (read_records not visible)
+	- changed name starfishfiles to starfish_cmd
+	- fixing warnings (-w), and possible bugs
+	- added getinclude and changed include to more php-like
