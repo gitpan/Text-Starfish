@@ -8,11 +8,10 @@
 
 package Text::Starfish;
 use strict;
-use Carp;
-#use Cwd;
-use Exporter;
-#require Exporter;
 use POSIX;
+use Carp;
+use Cwd qw(cwd);
+use Exporter;
 
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
 our @ISA = qw(Exporter);
@@ -22,16 +21,16 @@ our %EXPORT_TAGS = ( 'all' => [qw(
   file_modification_time getfile getmakefilelist get_verbatim_file
   getinclude include
   last_update putfile read_records read_starfish_conf starfish_cmd ) ] );
-#our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
+our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = @{ $EXPORT_TAGS{'all'} };
 
 # updated here and in META.yml
 our $NAME     = 'Starfish';
 our $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-our $VERSION  = '1.05';
+our $VERSION  = '1.06';
 
 use vars qw($Revision);
-($Revision = substr(q$Revision: 3.57 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.59 $, 10)) =~ s/\s+$//;
 
 #use vars @EXPORT_OK;
 
@@ -1650,4 +1649,4 @@ it is a larger system with the design objective being a
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.57 2007/05/28 16:34:58 vlado Exp $
+# $Id: Starfish.pm,v 3.59 2007/05/28 16:46:24 vlado Exp $

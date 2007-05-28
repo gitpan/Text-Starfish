@@ -64,3 +64,6 @@ Revision history for Perl extension Text::Starfish.
 	- changed name starfishfiles to starfish_cmd
 	- fixing warnings (-w), and possible bugs
 	- added getinclude and changed include to more php-like
+
+1.06  Mon May 28 13:46:59 ADT 2007
+        - fixed additional warning with Exporter (getcwd clash)
