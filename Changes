@@ -67,3 +67,9 @@ Revision history for Perl extension Text::Starfish.
 
 1.06  Mon May 28 13:46:59 ADT 2007
         - fixed additional warning with Exporter (getcwd clash)
+
+1.07 Tue Jul 17 20:25:07 ADT 2007
+	- debugging and major overhaul of test.pl for Windows by
+	  Charles Ikeson
+	- enforcing left-most, shortest match
+	- debuging of Makefile and Python styles

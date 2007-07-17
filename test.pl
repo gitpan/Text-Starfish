@@ -5,22 +5,33 @@
 use Test;
 BEGIN { plan tests => 5 };
 use Text::Starfish;
+use File::Copy;
+use Carp;
 ok(1);				# made this far
 
+# Slash hack was added because the Windows terminal evaluates does not
+# evaluate $vars (the use a %varname% form instead) and therefore would
+# not require the extra escape character at the beginning of the variable.
+my $slash_hack;
+if ($^O =~ m/MSWin/) {
+	$slash_hack = '';
+}
+else {
+	$slash_hack = '\\';
+}
 mkdir 'tmp', 0700 unless -d 'tmp';
 mkdir 'tmp/Text', 0700 unless -d 'tmp/Text';
-`ln -s ../../Starfish.pm tmp/Text/Starfish.pm`
-    unless -l 'tmp/Text/Starfish.pm';
+copy('Starfish.pm','tmp/Text/Starfish.pm')
+	unless -e 'tmp/Text/Starfish.pm';
 
 {
     my $f = getfile('starfish');
     $f =~ s{^#!/usr/bin/perl}{#!/usr/bin/perl -I../blib/lib} or die;
     putfile('tmp/starfish', $f);
-    `chmod u+x tmp/starfish`;
 }
 
 chdir 'tmp' or die;
-
+    &testcase('01', 'replace');
     &testcase(2);
     &testcase(3);
     &testcase(4);
@@ -30,92 +41,115 @@ chdir 'tmp' or die;
     &testcase(8);
     &testcase(9, 'out');
     # 10
-    `cp ../testfiles/9_java.out .`;
-    `./starfish -o=10_java.out -e='\$Starfish::HideMacros=1' 9_java.out`;
+    copy('../testfiles/9_java.out', '9_java.out');
+    `perl -I. -- starfish -o=10_java.out -e="$slash_hack\$Starfish::HideMacros=1" 9_java.out`;
     ok(getfile('10_java.out'),
 	   getfile("../testfiles/10_java.out"));
     # 11
-    `cp ../testfiles/10_java.out 10.java`;
-    `./starfish -o=11_java.out 10.java`;
+    copy('../testfiles/10_java.out', '10.java');
+    `perl -I. -- starfish -o=11_java.out 10.java`;
     ok(getfile('11_java.out'),
 	   getfile("../testfiles/11_java.out"));
     # 12
-    `cp ../testfiles/10_java.out 12.java`;
-    `./starfish -o=12.out -mode=0444 12.java`;
-    my $tmp = `ls -l 12.out|sed 's/ .*//'`;
-    `chmod u+r+w 12.out`;
-    ok($tmp, getfile("../testfiles/12.out"));
-    
+	`echo "OSNAME | $OSNAME |"`;
+	# Skip if it is windows
+	if ($^O =~ m/MSWin/) {
+		skip('Skipped under windows...');
+	}
+	else {
+		copy('../testfiles/10_java.out', '12.java');
+		`perl -I. -- starfish -o=12.out -mode=0444 12.java`;
+		my $tmp = `ls -l 12.out|sed 's/ .*//'`;
+		`chmod u+r+w 12.out`;
+		ok($tmp, getfile("../testfiles/12.out"));
+    }
+
     &testcase(13, 'out');
 
     # 14
-    `cp ../testfiles/13_java.in 14.java`;
-    `./starfish -o=14.out -e='\$Star::HideMacros=1' 14.java`;
+    copy('../testfiles/13_java.in','14.java');
+    `perl -I. -- starfish -o=14.out -e="$slash_hack\$Star::HideMacros=1" 14.java`;
     ok(getfile('14.out'),
        getfile('../testfiles/14.out'));
 
     # 15,16
-    `cp ../testfiles/15.java tmp.java`;
-    `./starfish -o=tmp.ERR -e'\$Star::HideMacros=1' tmp.java>tmp1 2>&1`;
+    copy('../testfiles/15.java','tmp.java');
+    `perl -I. -- starfish -o=tmp.ERR -e="$slash_hack\$Star::HideMacros=1" tmp.java>tmp1 2>&1`;
     ok($? != 0);
     okfiles('../testfiles/15.out', 'tmp1');
 
     # 17, old 16
-    `cp ../testfiles/16develop.SLeP tmp.SLeP`;
-    `cp ../testfiles/16.tex tmp.tex`;
-    `./starfish tmp.SLeP tmp.tex`;
-    `cat tmp.SLeP tmp.tex>tmp1`;
+    copy('../testfiles/16develop.SLeP','tmp.SLeP');
+    copy('../testfiles/16.tex','tmp.tex');
+    `perl -I. -- starfish tmp.SLeP tmp.tex`;
+	if ($^O =~ m/MSWin/) {
+	    `copy /B /Y tmp.SLeP+tmp.tex tmp1`;
+	}
+	else {
+	    `cat tmp.SLeP tmp.tex>tmp1`;
+	}
     okfiles('../testfiles/16.out', 'tmp1');
 
     # 18, old 17
-    `cp ../testfiles/p_t.java tmp.java`;
-    `./starfish -o=tmp1 tmp.java`;
+    copy('../testfiles/p_t.java','tmp.java');
+    `perl -I. -- starfish -o=tmp1 tmp.java`;
     okfiles('../testfiles/17.out', 'tmp1');
 
     # 19, old 18
-    `cp ../testfiles/p_t.java tmp.java`;
-    `./starfish -e='\$Release=1' -o=tmp1 tmp.java`;
+    copy('../testfiles/p_t.java', 'tmp.java');
+    `perl -I. -- starfish -e="$slash_hack\$Release=1" -o=tmp1 tmp.java`;
     okfiles('../testfiles/18.out', 'tmp1');
 
     # 20, old 19
-    `cp ../testfiles/19.html tmp.html`;
-    `./starfish -replace -o=tmp2 -mode=0644 tmp.html`;
-    `ls -l tmp2|sed 's/ .*//'>tmp1`;
-    okfiles('../testfiles/19.out', 'tmp1');
+	if ($^O =~ m/MSWin/) {
+		skip('Skipped under windows...');
+	}
+	else {
+		copy('../testfiles/19.html', 'tmp.html');
+	    `perl -I. -- starfish -replace -o=tmp2 -mode=0644 tmp.html`;
+	    `ls -l tmp2|sed 's/ .*//'>tmp1`;
+		okfiles('../testfiles/19.out', 'tmp1');
+	}
 
     # 21, old 20 has to be done after previous
-    `./starfish -replace -o=tmp2 tmp.html`;
-    `ls -l tmp2|sed 's/ .*//'>tmp1`;
-    okfiles('../testfiles/20.out', 'tmp1');
+	if ($^O =~ m/MSWin/) {
+		skip('Skipped under windows...');
+	}
+	else {
+	    `perl -I. -- starfish -replace -o=tmp2 tmp.html`;
+	    `ls -l tmp2|sed 's/ .*//'>tmp1`;
+	    okfiles('../testfiles/20.out', 'tmp1');
+	}
 
     # 22, old 21
-    `cp ../testfiles/21.html tmp2.html`;
-    `./starfish -replace -o=tmp1 tmp2.html`;
+    copy('../testfiles/21.html','tmp2.html');
+    `perl -I. -- starfish -replace -o=tmp1 tmp2.html`;
     okfiles('../testfiles/21.out', 'tmp1');
 
     # 23
     &testcase(22);    
 
     # 24
-    `cp ../testfiles/24.py 24.py`;
-    `./starfish 24.py`;
+    copy('../testfiles/24.py','24.py');
+    `perl -I. -- starfish 24.py`;
     okfiles('../testfiles/24.py.out', '24.py');
 
     # 25
-    `cp ../testfiles/25_Makefile Makefile`;
-    `./starfish Makefile`;
+    copy('../testfiles/25_Makefile','Makefile');
+    `perl -I. -- starfish Makefile`;
     okfiles('../testfiles/25_Makefile.out', 'Makefile');
 
     # 26
-    `cp ../testfiles/26_include_example.html 26_include_example.html`;
-    `cp ../testfiles/26_include_example1.html 26_include_example1.html`;
-    `./starfish -replace -o=26-out.html 26_include_example.html`;
+    copy('../testfiles/26_include_example.html','26_include_example.html');
+    copy('../testfiles/26_include_example1.html','26_include_example1.html');
+    `perl -I. -- starfish -replace -o=26-out.html 26_include_example.html`;
     okfiles('../testfiles/26-out.html', '26-out.html');
 
 sub okfiles {
     my $f1 = shift;
     while (@_) {
 	my $f2 = shift;
+	##debug: print STDERR "Comparing $f1 and $f2\n";
 	ok(getfile($f2), getfile($f1));
     }
 }
@@ -123,7 +157,7 @@ sub okfiles {
 sub getfile($) {
     my $f = shift;
     local *F;
-    open(F, "<$f") or die "getfile:cannot open $f:$!";
+    open(F, "<$f") or croak "getfile:cannot open $f:$!";
     my @r = <F>;
     close(F);
     return wantarray ? @r : join ('', @r);
@@ -145,6 +179,13 @@ sub testcase {
 	$outfile  = "$testnum.out";
 	$out      = "$testnum.out";
     }
+    elsif ( -e "../testfiles/$testnum.in" and
+	    $#_==0 and $_[0] eq 'replace' ) {
+	$infile   = "$testnum.in";
+	$procfile = "$testnum.in";
+	$outfile  = "$testnum.out";
+	$replace  = "$testnum.out";
+    }
     elsif ( -e "../testfiles/${testnum}_html.in" ) {
 	$infile = "${testnum}_html.in";
 	$procfile = "$testnum.html";
@@ -162,20 +203,20 @@ sub testcase {
     else { die }
 
     #print "cp ../testfiles/$infile $procfile\n";
-    `cp ../testfiles/$infile $procfile`;
+    copy("../testfiles/$infile", "$procfile");
     if ($replace) {
-	`./starfish -e='\$ver="testver"' -replace -o=$replace $procfile`;
+	`perl -I. -- starfish -e="$slash_hack\$ver=\"testver\"" -replace -o=$replace $procfile`;
 	ok(getfile($replace),
 	   getfile("../testfiles/$outfile"));
     }
     elsif ($out) {
-	`./starfish -e='\$ver="testver"' -o=$out $procfile`;
+	`perl -I. -- starfish -e="$slash_hack\$ver=\"testver\"" -o=$out $procfile`;
 	ok(getfile($out),
 	   getfile("../testfiles/$outfile"));
     }
     else {
-	#print "./starfish -e='\$ver=\"testver\"' $procfile\n";
-	`./starfish -e='\$ver="testver"' $procfile`;
+	#print "starfish -e='\$ver=\"testver\"' $procfile\n";
+	`perl -I. -- starfish -e="$slash_hack\$ver=\"testver\"" $procfile`;
 	ok(getfile($procfile), getfile("../testfiles/$outfile"));
     }
 }

@@ -1,7 +1,8 @@
-# (c) 2001-2007 Vlado Keselj http://www.cs.dal.ca/~vlado
-#
 # Starfish - Perl-based System for Text-Embedded
 #     Programming and Preprocessing
+#
+# (c) 2001-2007 Vlado Keselj http://www.cs.dal.ca/~vlado
+#               and contributing authors
 #
 # See the documentation following the code.  You can also use the
 # command "perldoc Starfish.pm".
@@ -27,10 +28,10 @@ our @EXPORT = @{ $EXPORT_TAGS{'all'} };
 # updated here and in META.yml
 our $NAME     = 'Starfish';
 our $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-our $VERSION  = '1.06';
+our $VERSION  = '1.07';
 
 use vars qw($Revision);
-($Revision = substr(q$Revision: 3.59 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.62 $, 10)) =~ s/\s+$//;
 
 #use vars @EXPORT_OK;
 
@@ -260,20 +261,24 @@ sub scan {
 	$self->{currenttoken} = '';
     }
     else {
-	my $i1 = length($self->{data}) + 1;   # length to token start
-	my $pl=0; my $i2=$i1; my $sl=0;
+	my $i1 = length($self->{data}) + 1;   # distance to starting anchor
+	my $i2 = $i1;                         # distance to ending anchor
+	my $pl=0; my $sl=0;
 	$self->{ttype} = -2;
 	foreach my $ttype (0 .. $#{ $self->{hook} }) {
-	    my ($j, $pl2, $j2, $sl2);
+	    my ($j, $pl2, $j2, $sl2);         # $j  dist to candidate starting achor
+	                                      # $j2 dist to candiate ending anchor
 	    if (exists($self->{hook}->[$ttype]->{'begin'})) {
+		# $j - to the start of the candidate active snippet
 		($j,$pl2) = _index($self->{data}, $self->{hook}->[$ttype]->{'begin'});
-		next unless $j != -1 && $j < $i1;
+		next unless $j != -1 && $j <= $i1;
 		my $data2 = substr($self->{data}, $j);
 		if ($self->{hook}->[$ttype]->{'end'} ne '') {
 		    ($j2, $sl2) = _index($data2, $self->{hook}->[$ttype]->{'end'});
 		    next if -1 == $j2;
 		    $j2 += $j;
 		} else { $j2 = length($self->{data}) + 1; $sl2 = 0; }
+		next if ($j==$i1 and $i2<=$j2);
 		$i1 = $j; $pl = $pl2; $i2 = $j2; $sl = $sl2;
 		$self->{ttype} = $ttype;
 		$self->{args} = [];
@@ -697,12 +702,12 @@ sub setStyle {
     if ($s eq 'perl') { }
     elsif ($s eq 'makefile') {
 	$self->{hook} = [
+	     {begin => qr/^\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return""}}, # Reserved for output
 	     {regex => qr/([\ \t]*)\#<\?([\000-\377]*?)!>\n
                           ([\ \t]*\#+\n[\000-\377]*?\n[\ \t]*\#-\n)?/x, replace=>\&evaluate_py1},
-	     {begin => qr/^\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return""}}, # Reserved for output
-	     {begin => qr/[ \t]*#[ \t]*<\?/, end => "!>\n", f => \&evaluate_py },
-	     {begin => '<?', end => "!>\n", f => \&evaluate_py },
-	     {begin => '<?starfish', end => "?>\n", f => \&evaluate_py }
+	     #{begin => qr/[ \t]*#[ \t]*<\?/, end => "!>\n", f => \&evaluate_py },
+	     #{begin => '<?', end => "!>\n", f => \&evaluate_py },
+	     #{begin => '<?starfish', end => "?>\n", f => \&evaluate_py }
 	    ];
 	$self->{CodePreparation} = 's/\\n\\s*#/\\n/g';
     }
@@ -721,9 +726,11 @@ sub setStyle {
     elsif ($s eq 'python') {
 	$self->{hook} =
 	    [{begin => qr/^\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return""}}, # Reserved for output
-	     {begin => qr/[ \t]*#[ \t]*<\?/, end => "!>\n", f => \&evaluate_py },
-	     {begin => '<?', end => "!>\n", f => \&evaluate_py },
-	     {begin => '<?starfish', end => "?>\n", f => \&evaluate_py }
+	     {regex => qr/([\ \t]*)\#<\?([\000-\377]*?)!>\n
+                          ([\ \t]*\#+\n[\000-\377]*?\n[\ \t]*\#-\n)?/x, replace=>\&evaluate_py1},
+#	     {begin => qr/[ \t]*#[ \t]*<\?/, end => "!>\n", f => \&evaluate_py },
+#	     {begin => '<?', end => "!>\n", f => \&evaluate_py },
+#	     {begin => '<?starfish', end => "?>\n", f => \&evaluate_py }
 # 	    [{begin => qr/\n\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return''}}, # Reserved for output
 # 	     {begin => qr/[ \t]*#[ \t]*<\?/, end => '!>', f => \&evaluate_py },
 # 	     {begin => '<?', end => '!>', f => \&evaluate_py },
@@ -1585,9 +1592,11 @@ I'd like to thank Steve Yeago, Tony Cox, Tony Abou-Assaleh for
 comments, and Charles Ikeson for suggesting the include function and
 other comments.
 
-=head1 AUTHOR
+=head1 AUTHORS
 
-Copyright 2001-2007 Vlado Keselj http://www.cs.dal.ca/~vlado
+2001-2007 Vlado Keselj http://www.cs.dal.ca/~vlado
+          and contributing authors:
+     2007 Charles Ikeson (overhaul of test.pl)
 
 This script is provided "as is" without expressed or implied warranty.
 This is free software; you can redistribute it and/or modify it under
@@ -1649,4 +1658,4 @@ it is a larger system with the design objective being a
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.59 2007/05/28 16:46:24 vlado Exp $
+# $Id: Starfish.pm,v 3.62 2007/07/17 23:25:50 vlado Exp $

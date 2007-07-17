@@ -7,6 +7,8 @@ Makefile.PL
 Starfish.pm
 starfish
 test.pl
+testfiles/01.in
+testfiles/01.out
 testfiles/10_java.out
 testfiles/11_java.out
 testfiles/12.out
