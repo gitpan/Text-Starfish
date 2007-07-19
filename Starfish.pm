@@ -28,10 +28,10 @@ our @EXPORT = @{ $EXPORT_TAGS{'all'} };
 # updated here and in META.yml
 our $NAME     = 'Starfish';
 our $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-our $VERSION  = '1.08';
+our $VERSION  = '1.09';
 
 use vars qw($Revision);
-($Revision = substr(q$Revision: 3.65 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.67 $, 10)) =~ s/\s+$//;
 
 #use vars @EXPORT_OK;
 
@@ -56,7 +56,7 @@ sub new($@) {
     my $copyhooks = '';
     foreach (@_) {
 	if (/^-infile=(.*)$/) { $self->{INFILE} = $1 }
-	if (/^-copyhooks$/)   { $copyhooks = 1 }
+	elsif (/^-copyhooks$/)   { $copyhooks = 1 }
 	else { _croak("unknown new option: $_") }
     }
 
@@ -97,6 +97,7 @@ sub include($@) { $::O .= getinclude(@_); return 1; }
 
 sub getinclude($@) {
     my $sf = loadinclude(@_);
+    return '' unless defined $sf;
     $sf->digest();
     return $sf->{Out};
 }
@@ -118,7 +119,7 @@ sub loadinclude($@) {
 
     if ($sf->{INFILE} eq '' or ! -r $sf->{INFILE} ) {
 	if ($require) { _croak("cannot getinclude file: ($sf->{INFILE})") }
-	return '';
+	return undef;
     }
 
     $sf->{data} = getfile $sf->{INFILE};
@@ -1496,7 +1497,8 @@ options C<-replace>, C<-noreplace>, and C<-require>.  A Starfish
 object is created by passing the file name as an C<-infile> argument,
 and by passing other options as arguments.  The file is read and the
 object is returned.  By default, the program will not break if the
-file does not exist or is not readable.  See also documentation about
+file does not exist or is not readable, but it will return undef value
+instead of an object.  See also documentation about
 C<include>, C<getinclude>, and C<new>.
 
 C<-noreplace> option will set up the Starfish object in the no-replace
@@ -1736,4 +1738,4 @@ it is a larger system with the design objective being a
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.65 2007/07/19 14:56:36 vlado Exp $
+# $Id: Starfish.pm,v 3.67 2007/07/19 15:54:46 vlado Exp $

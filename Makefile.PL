@@ -1,6 +1,6 @@
 use ExtUtils::MakeMaker;
 
-# $Id: Makefile.PL,v 3.12 2005/04/27 13:17:55 vlado Exp $
+# $Id: Makefile.PL,v 3.13 2007/07/19 15:58:01 vlado Exp $
 
 WriteMakefile(
     'NAME'		=> 'Text::Starfish',
@@ -11,10 +11,10 @@ WriteMakefile(
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
        (
       #ABSTRACT_FROM => 'Starfish.pm', # retrieve abstract from module
-       AUTHOR     => 'Vlado Keselj www.cs.dal.ca/~vlado') : ()),
+       AUTHOR     => 'Vlado Keselj http://www.cs.dal.ca/~vlado') : ()),
     'dist'  => {'COMPRESS'=>'gzip', 'SUFFIX' => 'gz'},
-    'clean' => {FILES => "tmp* Text *~"}
-    ,EXE_FILES => [ 'starfish' ]
+    'clean' => {FILES => "tmp* Text *~"},
+    EXE_FILES => [ 'starfish' ],
 );
 
 # private parts of Makefile

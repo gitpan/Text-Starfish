@@ -81,3 +81,6 @@ Revision history for Perl extension Text::Starfish.
 	- option -copyhooks introduced into new, loadinclude, getinclude
 	- report.pdf added to the distribution
 	- changes to documentation
+
+1.09
+	- debugging

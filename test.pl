@@ -21,8 +21,7 @@ else {
 }
 mkdir 'tmp', 0700 unless -d 'tmp';
 mkdir 'tmp/Text', 0700 unless -d 'tmp/Text';
-copy('Starfish.pm','tmp/Text/Starfish.pm')
-	unless -e 'tmp/Text/Starfish.pm';
+copy('Starfish.pm','tmp/Text/Starfish.pm');
 
 {
     my $f = getfile('starfish');
@@ -142,7 +141,7 @@ chdir 'tmp' or die;
     # 26
     copy('../testfiles/26_include_example.html','26_include_example.html');
     copy('../testfiles/26_include_example1.html','26_include_example1.html');
-    `perl -I. -- starfish -replace -o=26-out.html 26_include_example.html`;
+    starfish_cmd(qw(-replace -o=26-out.html 26_include_example.html));
     okfiles('../testfiles/26-out.html', '26-out.html');
 
 sub okfiles {
