@@ -28,10 +28,10 @@ our @EXPORT = @{ $EXPORT_TAGS{'all'} };
 # updated here and in META.yml
 our $NAME     = 'Starfish';
 our $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-our $VERSION  = '1.07';
+our $VERSION  = '1.08';
 
 use vars qw($Revision);
-($Revision = substr(q$Revision: 3.62 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.65 $, 10)) =~ s/\s+$//;
 
 #use vars @EXPORT_OK;
 
@@ -46,22 +46,31 @@ sub putfile($@);
 sub read_records($ );
 sub starfish_cmd(@);
 
-sub new {
+sub new($@) {
     my $proto = shift;
     my $class = ref($proto) || $proto;
-
     my $self = {};
-    $self->{Loops} = 1;
-
-    # These may be set in starfish by command line options
-    # no need to initialize
-    # OUTFILE INITIAL_CODE REPLACE NEW_FILE_MODE
-    #
-    # Name other fields:
-    # $IN_FILE $OUT_FILE @GLOBHOOK(not used, TODO maybe)
-    # %FORBID_MACRO %MACRO_KEY
-
     bless($self, $class);
+
+    $self->{Loops} = 1;
+    my $copyhooks = '';
+    foreach (@_) {
+	if (/^-infile=(.*)$/) { $self->{INFILE} = $1 }
+	if (/^-copyhooks$/)   { $copyhooks = 1 }
+	else { _croak("unknown new option: $_") }
+    }
+
+    if ($copyhooks) {
+	_croak("new: cannot cophooks if Star is not there") unless
+	    ref($::Star) eq 'Text::Starfish';
+	$self->{Style}           = $::Star->{Style};
+	$self->{CodePreparation} = $::Star->{CodePreparation};
+	$self->{LineComment}     = $::Star->{LineComment};
+	$self->{hook}            = [ @{ $::Star->{hook} } ];
+    }
+
+    $self->setStyle() unless $copyhooks;
+
     return $self;
 }
 
@@ -87,26 +96,33 @@ sub starfish_cmd(@) {
 sub include($@) { $::O .= getinclude(@_); return 1; }
 
 sub getinclude($@) {
-    my $sf = Text::Starfish->new();
-    $sf->{INFILE}  = shift @_;
-    $sf->{REPLACE} = 1;
+    my $sf = loadinclude(@_);
+    $sf->digest();
+    return $sf->{Out};
+}
+
+sub loadinclude($@) {
+    my $infile = shift;
+    my @args = ();
+    my $replace = 1;
     my $require = '';
     foreach (@_) {
-	if    (/^-replace$/)   { $sf->{REPLACE} = 1 }
-	elsif (/^-noreplace$/) { $sf->{REPLACE} = '' }
-	elsif (/^-require$/) { $require = 1 }
-	else { _croak("unknown getinclude option: $_") }
+	if    (/^-replace$/)   { $replace = 1 }
+	elsif (/^-noreplace$/) { $replace = '' }
+	elsif (/^-require$/)   { $require = 1 }
+	else  { push @args, $_ }
     }
+
+    my $sf = Text::Starfish->new("-infile=$infile", @args);
+    $sf->{REPLACE} = $replace;
 
     if ($sf->{INFILE} eq '' or ! -r $sf->{INFILE} ) {
 	if ($require) { _croak("cannot getinclude file: ($sf->{INFILE})") }
 	return '';
     }
 
-    $sf->setStyle();
     $sf->{data} = getfile $sf->{INFILE};
-    $sf->digest();
-    return $sf->{Out};
+    return $sf;
 }
 
 sub process_files {
@@ -1252,6 +1268,10 @@ In Makefile, add lines for updating p_t.java, and generating p.java
 
 =head2 Macros
 
+I<Note:> This is a quite old part of Starfish and needs a revision.
+Macros are a form of code folding (related terms: holophrasting,
+ellusion(?)), expressed in the Starfish framework.
+
 Starfish includes a set of macro features (primitive, but in progress).
 There are two modes, hidden macros and not hidden, which are indicated
 using variable $Star->{HideMacros}, e.g.:
@@ -1340,6 +1360,29 @@ final substitution in an HTML file:
 
 =head1 METHODS
 
+=head2 Text::Starfish->new(options)
+
+The method for creation of a new Starfish object.  If we are already
+processing within a Starfish object, we may use a shorter variant
+$Star->new().
+
+The options, given as arguments, are a list of strings, which may
+include the following:
+
+C<-infile=*> Specifies the name of the input file (field INFILE).
+   The file will not be read.
+
+C<-copyhooks> Copies hooks from the Star object (C<$::Star>).  This
+    option is also available in C<loadinclude>, C<getinclude>, and
+    C<include>, from which it is passed to C<new>.  It causes the new
+    object to have similar properties as the current Star object.  It
+    could be generalized to include any specified object, or to use
+    the prototype object that is given to the constructor, but there
+    does not seem to be need for this generalization.  More precisely,
+    C<-copyhooks> copies the fields: C<Style>, C<CodePreparation>,
+    C<LineComment>, and per-component copies the array C<hook>.
+
+
 =head2 $o->addHook($p,$s,$f)
 
 Adds a new hook. The parameter $p is the starting delimiter, $s is the
@@ -1424,11 +1467,43 @@ contents (see also include to echo the content implicitly).
 By default, the program will not break if the file does not exist.
 The option -noreplace will starfish file in a non-replace mode.
 The default mode is replace and that is usually the mode that is
-needed in includes (non-replace may lead to a suprising behaviour,
-although it should be expected).  The option -require will cause
-program to croak if the file does not exist.  It is similar to the PHP
-function require.  A special function require is not used since it is
-a Perl reserved word.
+needed in includes (non-replace may lead to a suprising behaviour).
+The option -require will cause program to croak if the file does not
+exist.  It is similar to the PHP function require.  A special function
+named require is not used since C<require> is a Perl reserved word.
+Another interesting option is C<-copyhooks>, for using hooks and some
+other relevant properties from the Star object (C<$::Star>).  This
+option is eventually passed to C<new>, so see the constructor new for
+more details.
+
+The code for get include is the following:
+
+ sub getinclude($@) {
+     my $sf = loadinclude(@_);
+     $sf->digest();
+     return $sf->{Out};
+ }
+
+and it can be used as a useful template for using C<loadinclude>
+directly.  The function C<loadinclude> creates a Starfish object, and
+reads the file, however it is not digested yet, so one can modify the
+object before this.
+
+=head2 loadinclude( I<filename and options> )
+
+The first argument is a filename.  Loadinclude will interpret the
+options C<-replace>, C<-noreplace>, and C<-require>.  A Starfish
+object is created by passing the file name as an C<-infile> argument,
+and by passing other options as arguments.  The file is read and the
+object is returned.  By default, the program will not break if the
+file does not exist or is not readable.  See also documentation about
+C<include>, C<getinclude>, and C<new>.
+
+C<-noreplace> option will set up the Starfish object in the no-replace
+mode.  The default mode is replace and that is usually the mode that
+is needed in includes.  The option C<-require> will cause program to
+croak if the file does not exist.  An interesting option is
+<C-copyhooks>, which is documented in the C<new> method.
 
 =head2 starfish_cmd I<list of file names and options>
 
@@ -1512,8 +1587,9 @@ Embedded variables are not handled.
 
 =item B<htmlquote> I<string>
 
-The following definition is taken from the CIPP project
-(F<http://aspn.activestate.com/ASPN/CodeDoc/CIPP/CIPP/Manual.html>):
+The following definition is taken from the CIPP project.
+
+(F<http://aspn.activestate.com/ASPN/CodeDoc/CIPP/CIPP/Manual.html>)
 
 This command quotes the content of a variable, so that it can be used
 inside a HTML option or <TEXTAREA> block without the danger of syntax
@@ -1574,7 +1650,8 @@ For example, in the following expansion:
 
  starfish: tmp
          starfish Makefile
-         #<? if (-e "file.tex.sfish") { echo "\tstarfish -o=tmp/file.tex -replace file.tex.sfish" } !>
+         #<? if (-e "file.tex.sfish")
+         #{ echo "\tstarfish -o=tmp/file.tex -replace file.tex.sfish" } !>
          #+
          starfish -o=tmp/file.tex -replace file.tex.sfish
          #-
@@ -1594,9 +1671,9 @@ other comments.
 
 =head1 AUTHORS
 
-2001-2007 Vlado Keselj http://www.cs.dal.ca/~vlado
-          and contributing authors:
-     2007 Charles Ikeson (overhaul of test.pl)
+ 2001-2007 Vlado Keselj http://www.cs.dal.ca/~vlado
+           and contributing authors:
+      2007 Charles Ikeson (overhaul of test.pl)
 
 This script is provided "as is" without expressed or implied warranty.
 This is free software; you can redistribute it and/or modify it under
@@ -1620,6 +1697,7 @@ included in the list below.
 =item [ePerl] ePerl
 
 This script is somewhat similar to ePerl, about which you can read at
+
 F<http://www.ossp.org/pkg/tool/eperl/>.  It was developed by Ralf
 S. Engelshall in the period from 1996 to 1998.
 
@@ -1658,4 +1736,4 @@ it is a larger system with the design objective being a
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.62 2007/07/17 23:25:50 vlado Exp $
+# $Id: Starfish.pm,v 3.65 2007/07/19 14:56:36 vlado Exp $

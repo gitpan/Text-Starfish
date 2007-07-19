@@ -73,3 +73,11 @@ Revision history for Perl extension Text::Starfish.
 	  Charles Ikeson
 	- enforcing left-most, shortest match
 	- debuging of Makefile and Python styles
+
+1.08 Thu Jul 19 11:57:05 ADT 2007
+	- new accepts options, -infile=* is one of them
+	- new calls setStyle
+	- loadinclude introduced
+	- option -copyhooks introduced into new, loadinclude, getinclude
+	- report.pdf added to the distribution
+	- changes to documentation

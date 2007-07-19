@@ -6,6 +6,7 @@ Changes
 Makefile.PL
 Starfish.pm
 starfish
+report.pdf
 test.pl
 testfiles/01.in
 testfiles/01.out
