@@ -25,21 +25,24 @@ copy('Starfish.pm','tmp/Text/Starfish.pm');
 
 {
     my $f = getfile('starfish');
-    $f =~ s{^#!/usr/bin/perl}{#!/usr/bin/perl -I../blib/lib} or die;
+    $f =~ s<^#!/usr/bin/perl>{#!/usr/bin/perl -I../blib/lib} or die;
     putfile('tmp/starfish', $f);
 }
 
 chdir 'tmp' or die;
-    &testcase('01', 'replace');
-    &testcase(2);
-    &testcase(3);
-    &testcase(4);
-    &testcase(5);
-    &testcase(6, 'out');
-    &testcase(7, 'replace');
-    &testcase(8);
-    &testcase(9, 'out');
-    # 10
+&testcase('01', 'replace');
+&testcase('02', 'replace');
+&testcase('03', 'replace');
+
+&testcase(2);
+&testcase(3);
+&testcase(4);
+&testcase(5);
+&testcase(6, 'out');
+&testcase(7, 'replace');
+&testcase(8);
+&testcase(9, 'out');
+# 10
     copy('../testfiles/9_java.out', '9_java.out');
     `perl -I. -- starfish -o=10_java.out -e="$slash_hack\$Starfish::HideMacros=1" 9_java.out`;
     ok(getfile('10_java.out'),
@@ -148,8 +151,9 @@ sub okfiles {
     my $f1 = shift;
     while (@_) {
 	my $f2 = shift;
-	##debug: print STDERR "Comparing $f1 and $f2\n";
-	ok(getfile($f2), getfile($f1));
+	if (! ok(getfile($f2), getfile($f1)) )
+	{ print STDERR "Files: $f1 and $f2\n" }
+
     }
 }
 
@@ -192,6 +196,20 @@ sub testcase {
         if ($#_ > -1 and $_[0] eq 'replace')
 	{  $replace = "${testnum}_out.html" }
     }
+    elsif ( -e "../testfiles/${testnum}_tex.in" ) {
+	my $ext = $1;
+	$infile = "${testnum}_tex.in";
+	$procfile = "$testnum.tex";
+	$outfile = "${testnum}_tex.out";
+        if ($#_ > -1 and $_[0] eq 'replace')
+	{  $replace = "${testnum}_out.tex" }
+    }
+    elsif ( -e "../testfiles/${testnum}.html.sfish" ) {
+	$infile = "${testnum}.html.sfish";
+	$procfile = "$testnum.html.sfish";
+	$replace = "$testnum.html";
+	$outfile = "${testnum}_html.out";
+    }
     elsif ( -e "../testfiles/${testnum}_java.in" and
 	    $#_==0 and $_[0] eq 'out' ) {
 	$infile = "${testnum}_java.in";
@@ -201,21 +219,17 @@ sub testcase {
     }
     else { die }
 
-    #print "cp ../testfiles/$infile $procfile\n";
     copy("../testfiles/$infile", "$procfile");
     if ($replace) {
 	`perl -I. -- starfish -e="$slash_hack\$ver=\"testver\"" -replace -o=$replace $procfile`;
-	ok(getfile($replace),
-	   getfile("../testfiles/$outfile"));
+	okfiles("../testfiles/$outfile", $replace);
     }
     elsif ($out) {
 	`perl -I. -- starfish -e="$slash_hack\$ver=\"testver\"" -o=$out $procfile`;
-	ok(getfile($out),
-	   getfile("../testfiles/$outfile"));
+	okfiles("../testfiles/$outfile", $out);
     }
     else {
-	#print "starfish -e='\$ver=\"testver\"' $procfile\n";
 	`perl -I. -- starfish -e="$slash_hack\$ver=\"testver\"" $procfile`;
-	ok(getfile($procfile), getfile("../testfiles/$outfile"));
+	okfiles("../testfiles/$outfile", $procfile);
     }
 }

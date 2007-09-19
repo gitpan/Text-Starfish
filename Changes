@@ -82,5 +82,11 @@ Revision history for Perl extension Text::Starfish.
 	- report.pdf added to the distribution
 	- changes to documentation
 
-1.09
+1.09 Thu Jul 19 14:00:37 ADT 2007
 	- debugging
+
+1.10 Wed Sep 19 12:41:37 ADT 2007
+	- introduced HTML templating style, .html.sfish
+	- documentation improvement
+	- debugging (minor, makefile style)
+	- debugging: a serious memory leak in scanning

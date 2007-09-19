@@ -10,6 +10,10 @@ report.pdf
 test.pl
 testfiles/01.in
 testfiles/01.out
+testfiles/02.html.sfish
+testfiles/02_html.out
+testfiles/03_tex.in
+testfiles/03_tex.out
 testfiles/10_java.out
 testfiles/11_java.out
 testfiles/12.out

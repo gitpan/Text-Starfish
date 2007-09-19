@@ -1,8 +1,9 @@
-1 - simple test
-2 - simple test, testiranje variabli
+2 - simple test, variable testing
 3 - repeated test 2
 
 01 - testing hook adding, with replace
+02 - testing .html.sfish style
+03 - testing .tex with a lot of patterns (previous memory issue)
 
 7 - html example
 

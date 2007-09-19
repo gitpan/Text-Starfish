@@ -28,10 +28,10 @@ our @EXPORT = @{ $EXPORT_TAGS{'all'} };
 # updated here and in META.yml
 our $NAME     = 'Starfish';
 our $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-our $VERSION  = '1.09';
+our $VERSION  = '1.10';
 
 use vars qw($Revision);
-($Revision = substr(q$Revision: 3.67 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.74 $, 10)) =~ s/\s+$//;
 
 #use vars @EXPORT_OK;
 
@@ -81,7 +81,7 @@ sub starfish_cmd(@) {
 	if    (/^-e=?/)      { $sf->{INITIAL_CODE} = $' }
 	elsif (/^-mode=/)    { $sf->{NEW_FILE_MODE} = $' }
 	elsif (/^-o=/)       { $sf->{OUTFILE}      = $' }
-	elsif (/^-replace$/) { $sf->{REPLACE} = $GlobalREPLACE = 1 }
+	elsif (/^-replace$/) { $sf->{REPLACE} = $GlobalREPLACE = 1; }
         elsif (/^-v$/) { print "$NAME, version $VERSION, $ABSTRACT\n"; exit 0; } 
 	else { push @tmp, $_ }
     }
@@ -270,9 +270,9 @@ sub _index {
 #             -2 outer text
 sub scan {
     my $self = shift;
-    my ($newOut, $newData);
 
     $self->{prefix} = $self->{suffix} = '';
+    $self->{args} = [];
     if ($self->{data} eq '') {	# no more data, EOF
 	$self->{ttype} = -1;
 	$self->{currenttoken} = '';
@@ -298,28 +298,28 @@ sub scan {
 		next if ($j==$i1 and $i2<=$j2);
 		$i1 = $j; $pl = $pl2; $i2 = $j2; $sl = $sl2;
 		$self->{ttype} = $ttype;
-		$self->{args} = [];
+		$self->{args}  = [];
 	    } else {
-		my @args = ($self->{data} =~ $self->{hook}->[$ttype]->{regex});
+		my @args = ($self->{data} =~ /$self->{hook}->[$ttype]->{regex}/m);
 		next unless @args;
 		my $j = length($`);
 		next unless $j < $i1;
-		$i1 = $j;
+		$i1 = $j; $i2 = $i1+length($&); $sl=$pl=0;
 		unshift @args, $&;
-		$self->{prefix} = '';
-		$self->{currenttoken} = $&;
-		$self->{suffix} = '';
 		$self->{ttype} = $ttype;
 		$self->{args} = \@args;
-		$newOut .= $self->{Out}.$`;
-		$newData = $';
 	    }
 	}
 
 	if ($self->{ttype}==-2) {$self->{currenttoken}=$self->{data}; $self->{data}=''}
         elsif (@{$self->{args}}) {
-	    $self->{Out} = $newOut;
-	    $self->{data} = $newData;
+	    #$self->{Out} = $newOut;
+	    $self->{Out} .= substr($self->{data}, 0, $i1);
+	    #$self->{data} = $newData;
+	    $self->{data} = substr($self->{data}, $i2+$sl);
+	    $self->{prefix} = '';
+	    $self->{currenttoken} = substr($self->{data}, $i1+$pl, $i2-$i1-$pl);
+	    $self->{suffix} = '';
 	}
 	else {
 	    $self->{Out} .= substr($self->{data}, 0, $i1); # just copy type -2
@@ -408,12 +408,17 @@ sub evaluate_py {
     return "$pref$c$suf";
 }
 
-#{regex => qr/([ \t]*)#<\?(.*?)!>\n(#+\n.*?\n#-\n)?/, replace=>\&evaluate_py1},
+#!!!
+#old:{regex => qr/([ \t]*)# *<\?(.*?)!>\n(#+\n.*?\n#-\n)?/, replace=>\&evaluate_py1},
+#    my $re_py1 = qr/([\ \t]*)\#(\ *<\?)([\000-\377]*?)!>\n
+#	            ([\ \t]*\#+\n[\000-\377]*?\n[\ \t]*\#-\n)?/x;
+#
 # Python-specific evaluator (used also for makefile style)
 sub evaluate_py1 {
     my $self = shift;
     my $allmatch = shift;
     my $indent = shift;
+    my $prefix = shift;
     my $code = shift; my $c = $code;
     my $oldout = shift;
 
@@ -428,18 +433,10 @@ sub evaluate_py1 {
     local $::Star = $self;
     $self->eval1($code, 'snippet');
  
-    #if ($self->{REPLACE}) { return $::O }
     if ($self->{REPLACE}) { return $indent.$::O }
-    elsif ($::O eq '') { return $indent."#<?$c!>\n" }
-    else {
-	return $indent."#<?$c!>\n$indent#+\n".$::O."\n$indent#-\n";
-# 	my $indent = '';
-# 	if ($pref =~ /^(\s+)#/) { $indent = $1 }
-# 	elsif ($c =~ /^(\s+)#/m) { $indent = $1 }
-# 	$suf .= $indent."#+\n".$::O.
-# 	        "\n".$indent."#-\n";
-    }
-#    return "$pref$c$suf";
+    elsif ($::O eq '') { return "$indent#$prefix$c!>\n" }
+    else
+    { return "$indent#$prefix$c!>\n$indent#+\n".$::O."\n$indent#-\n" }
 }
 
 # a predefined evaluator
@@ -451,6 +448,13 @@ sub eval_ignore {
     my $code = shift;
     my $suf = shift;
     return $pref.$code.$suf;
+}
+
+# predefined ignore evaluator for regex hooks
+sub repl_comment {
+    my $self = shift;
+    if ($self->{REPLACE}) { return '' }
+    return $self->{currenttoken};
 }
 
 sub define {
@@ -691,14 +695,18 @@ sub setStyle {
 	if (defined $self->{STYLE}) { $self->setStyle($self->{STYLE}) }
 	else {
 	    my $f = $self->{INFILE};
-	    $f =~ s/\.s(tar)?fish$//;
-	    if    ($f =~ /\.html?/i)       { $self->setStyle('html') }
-	    elsif ($f =~ /\.(?:la)?tex$/i) { $self->setStyle('tex') }
-	    elsif ($f =~ /\.java$/i)       { $self->setStyle('java') }
-	    elsif ($f =~ /^[Mm]akefile/)   { $self->setStyle('makefile') }
-	    elsif ($f =~ /\.ps$/i)         { $self->setStyle('ps') }
-	    elsif ($f =~ /\.py$/i)         { $self->setStyle('python') }
-	    else { $self->setStyle('perl') }
+
+	    if    ($f =~ /\.html\.sfish$/i) { $self->setStyle('.html.sfish') }
+	    else {
+		$f =~ s/\.s(tar)?fish$//;
+		if    ($f =~ /\.html?/i)        { $self->setStyle('html') }
+		elsif ($f =~ /\.(?:la)?tex$/i)  { $self->setStyle('tex') }
+		elsif ($f =~ /\.java$/i)        { $self->setStyle('java') }
+		elsif ($f =~ /^[Mm]akefile/)    { $self->setStyle('makefile') }
+		elsif ($f =~ /\.ps$/i)          { $self->setStyle('ps') }
+		elsif ($f =~ /\.py$/i)          { $self->setStyle('python') }
+		else { $self->setStyle('perl') }
+	    }
 	}
 	return;
     }
@@ -716,16 +724,16 @@ sub setStyle {
     ];
     $self->{CodePreparation} = 's/\\n(?:#|%|\/\/+)/\\n/g';
 
+    # Used for Python and Makefile with &evaluate_py1
+    my $re_py1 = qr/([\ \t]*)\#(\ *<\?)([\000-\377]*?)!>\n
+	            ([\ \t]*\#+\n[\000-\377]*?\n[\ \t]*\#-\n)?/x;
+
     if ($s eq 'perl') { }
     elsif ($s eq 'makefile') {
 	$self->{hook} = [
 	     {begin => qr/^\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return""}}, # Reserved for output
-	     {regex => qr/([\ \t]*)\#<\?([\000-\377]*?)!>\n
-                          ([\ \t]*\#+\n[\000-\377]*?\n[\ \t]*\#-\n)?/x, replace=>\&evaluate_py1},
-	     #{begin => qr/[ \t]*#[ \t]*<\?/, end => "!>\n", f => \&evaluate_py },
-	     #{begin => '<?', end => "!>\n", f => \&evaluate_py },
-	     #{begin => '<?starfish', end => "?>\n", f => \&evaluate_py }
 	    ];
+	$self->addHook($re_py1, \&evaluate_py1);
 	$self->{CodePreparation} = 's/\\n\\s*#/\\n/g';
     }
     elsif ($s eq 'java') {
@@ -738,22 +746,24 @@ sub setStyle {
 	$self->{LineComment} = '%';
 	$self->{hook}=[{begin => "%+\n", end=>"\n%-\n", f=>sub{return''}},  # Reserved for output
 	       {begin => '<?', end => "!>\n", f => \&evaluate }];
-	$self->{CodePreparation} = 's/\\n(?:#|%+|\/\/+)/\\n/g';
+	$self->{CodePreparation} = 's/^[ \t]*%//mg';
     }
     elsif ($s eq 'python') {
 	$self->{hook} =
 	    [{begin => qr/^\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return""}}, # Reserved for output
-	     {regex => qr/([\ \t]*)\#<\?([\000-\377]*?)!>\n
-                          ([\ \t]*\#+\n[\000-\377]*?\n[\ \t]*\#-\n)?/x, replace=>\&evaluate_py1},
-#	     {begin => qr/[ \t]*#[ \t]*<\?/, end => "!>\n", f => \&evaluate_py },
-#	     {begin => '<?', end => "!>\n", f => \&evaluate_py },
-#	     {begin => '<?starfish', end => "?>\n", f => \&evaluate_py }
-# 	    [{begin => qr/\n\s*#\+\n/, end=>qr/\n\s*#-\n/, f=>sub{return''}}, # Reserved for output
-# 	     {begin => qr/[ \t]*#[ \t]*<\?/, end => '!>', f => \&evaluate_py },
-# 	     {begin => '<?', end => '!>', f => \&evaluate_py },
-# 	     {begin => '<?starfish', end => '?>', f => \&evaluate_py }
 	     ];
+	$self->addHook($re_py1, \&evaluate_py1);
 	$self->{CodePreparation} = 's/\\n\\s*#/\\n/g';
+    }
+    elsif ($s eq '.html.sfish') {
+	undef $self->{LineComment};
+	$self->{hook}=[{begin => "\n<!-- + -->\n", end=>"\n<!-- - -->\n",   # Reserved for output
+		f=>sub{return''}},
+	       {begin => '<!--<?', end => '!>-->', f => \&evaluate },
+	       {begin=>'<?starfish ', end=>'?>', f=>\&evaluate },
+        ];
+	$self->addHook(qr/^#.*\n/, 'comment');
+	$self->{CodePreparation} = '';
     }
     elsif ($s eq 'html') {
 	undef $self->{LineComment};
@@ -778,35 +788,50 @@ sub setStyle {
 
 sub addHook {
     my $self = shift;
-    my $p = shift;
-    my $s = shift;
-    my $fun = shift;
     my @Hook = @{ $self->{hook} };
-    if ($fun eq 'default')
-    { push @Hook, {begin=>$p, end=>$s, f=>\&evaluate} }
-    elsif ($fun eq 'ignore')
-    { push @Hook, {begin=>$p, end=>$s, f=>\&eval_ignore} }
-    elsif (ref($fun) eq 'CODE') {
-	push @Hook, {begin=>$p, end=>$s,
-		     f=> sub { local $_; my $self=shift;
-			       my $p=shift; $_=shift; my $s=shift;
-			       &$fun($p,$_,$s);
-			       if ($self->{REPLACE}) { return $_ }
-			       return "$p$_$s";
-			   }
-		 };
-    }
-    else {
-	eval("push \@Hook, {begin=>\$p, end=>\$s,".
-	     "f=>sub{\n".
-	     "local \$_;\n".
-	     "my \$self = shift;\n".
-	     "my \$p = shift; \$_ = shift; my \$s = shift;\n".
-	     "$fun;\n".
-             'if ($self->{REPLACE}) { return $_ }'."\n".
-             "return \"\$p\$_\$s\"; } };");
-    }
-    _croak("addHook error:$@") if $@;
+
+    if ($#_ == 2) {
+	my $p = shift; my $s=shift; my $fun=shift;
+	if ($fun eq 'default')
+	{ push @Hook, {begin=>$p, end=>$s, f=>\&evaluate} }
+	elsif ($fun eq 'ignore')
+	{ push @Hook, {begin=>$p, end=>$s, f=>\&eval_ignore} }
+	elsif (ref($fun) eq 'CODE') {
+	    push @Hook, {begin=>$p, end=>$s,
+			 f=> sub { local $_; my $self=shift;
+				   my $p=shift; $_=shift; my $s=shift;
+				   &$fun($p,$_,$s);
+				   if ($self->{REPLACE}) { return $_ }
+				   return "$p$_$s";
+			       }
+		     };
+	}
+	else {
+	    eval("push \@Hook, {begin=>\$p, end=>\$s,".
+		 "f=>sub{\n".
+		 "local \$_;\n".
+		 "my \$self = shift;\n".
+		 "my \$p = shift; \$_ = shift; my \$s = shift;\n".
+		 "$fun;\n".
+		 'if ($self->{REPLACE}) { return $_ }'."\n".
+		 "return \"\$p\$_\$s\"; } };");
+	}
+	_croak("addHook error:$@") if $@;
+    } elsif ($#_ == 1) {
+	my $regex=shift; my $replace = shift;
+	if (ref($regex) ne 'Regexp')
+	{ _croak("addHook: first arg not regex (TODO?): ".
+		 ref($regex).", ".ref($replace)) } 
+
+	if (ref($replace) eq '' && $replace eq 'comment')
+	{ push @Hook, {regex=>$regex, replace=>\&repl_comment} }
+	elsif (ref($replace) eq 'CODE')
+	{ push @Hook, {regex=>$regex, replace=>$replace} }
+	else { _croak("addHook, undefined regex format input ".
+	              "(TODO?): ".ref($regex).", ".ref($replace)
+		      ) }
+    } else { _croak("addHook parameter error") }
+
     $self->{hook} = \@Hook;
 }
 
@@ -942,7 +967,7 @@ sub putfile($@) {
     open(F, ">$f") or die "starfish:putfile:cannot open $f:$!";
     print F '' unless @_;
     while (@_) { print F shift(@_) }
-    close(F)
+    close(F);
 }
 
 sub appendfile($@) {
@@ -951,7 +976,7 @@ sub appendfile($@) {
     open(F, ">>$f") or die "starfish:appendfile:cannot open $f:$!";
     print F '' unless @_;
     while (@_) { print F shift(@_) }
-    close(F)
+    close(F);
 }
 
 sub htmlquote($) {
@@ -1332,7 +1357,7 @@ Old macro definition can be overriden by:
   ...
   //m!end
 
-=head1 PREDEFINED VARIABLES
+=head1 PREDEFINED VARIABLES AND FIELDS
 
 =head2 $O
 
@@ -1359,6 +1384,11 @@ final substitution in an HTML file:
 
  <!--<? $Star->{Out} =~ s/^#.*\n//mg; !>-->
 
+=head2 $Star->{OUTFILE}
+
+If option C<-o=*> is used, then this variable contains the name of the
+specified output file.
+
 =head1 METHODS
 
 =head2 Text::Starfish->new(options)
@@ -1384,14 +1414,22 @@ C<-copyhooks> Copies hooks from the Star object (C<$::Star>).  This
     C<LineComment>, and per-component copies the array C<hook>.
 
 
-=head2 $o->addHook($p,$s,$f)
+=head2 $o->addHook
 
-Adds a new hook. The parameter $p is the starting delimiter, $s is the
-ending delimiter, and $f is the evaluator.
-The parameters $p and $s can be either strings, which are matched
-exactly, or regular expressions.  An empty ending delimiter will match
-the end of the input.
-There are several different ways of providing $f:
+Adds a new hook.  The method can take two or three parameters:
+
+ ($prefix, $suffix, $evaluator)
+
+or
+
+ ($regex, $replacement)
+
+In the case of three parameters C<($prefix, $suffix, $evaluator)>,
+the parameter $prefix is the starting delimiter, $suffix is the ending
+delimiter, and $evaluator is the evaluator.  The parameters $prefix
+and $suffix can either be strings, which are matched exactly, or
+regular expressions.  An empty ending delimiter will match the end of
+input.  The evaluator can be provided in the following ways:
 
 =over 5
 
@@ -1414,9 +1452,21 @@ are interpreted as code which is embedded in an
 =item code reference (sub {...})
 
 is interpreted as code which is embedded in an evaluator.  The local 
-$_ provides the captured string and it is to be replaced with the
-result.  Three arguments are also provided to the code: $p - the
-prefix, $_, and $s - the suffix.
+$_ provides the captured string.  Three arguments are also provided to
+the code: $p - the prefix, $_, and $s - the suffix.
+The result is the value of $_.
+
+For the format with two parameters, C<($regex, $replacement)>,
+currently addHook understands only replacement 'comment', which will
+repeat the token in the non-replace mode, and remove it in the replace
+mode; e.i., equivalent to no echo.  The regular expression is mathched in
+the multi-line mode, so ^ and $ can be used to match beginning and
+ending of a line.  (Caveat: Due to the way how scanner works,
+beginning of a line starts after the end of previously matched token.)
+
+Example:
+
+ $Star->addHook(qr/^#.*\n/, 'comment');
 
 =back
 
@@ -1505,7 +1555,7 @@ C<-noreplace> option will set up the Starfish object in the no-replace
 mode.  The default mode is replace and that is usually the mode that
 is needed in includes.  The option C<-require> will cause program to
 croak if the file does not exist.  An interesting option is
-<C-copyhooks>, which is documented in the C<new> method.
+C<-copyhooks>, which is documented in the C<new> method.
 
 =head2 starfish_cmd I<list of file names and options>
 
@@ -1640,8 +1690,18 @@ Reads recursively (up the dir tree) configuration files C<starfish.conf>.
 =head1 STYLES
 
 There is a set of predefined styles for different input files:
-HTML (html), TeX (tex), Java (java), Makefile (makefile), PostScript
-(ps), Python (python), and Perl (perl).
+HTML (html), HTML templating style (.html.sfish), TeX (tex), Java
+(java), Makefile (makefile), PostScript (ps), Python (python), and
+Perl (perl).
+
+=head2 HTML Style (html)
+
+=head2 HTML Templating Style (.html.sfish)
+
+This style is similar to the HTML style, but it is supposed to be run
+in the replace mode towards a target .html file, so it allows for more
+hooks.  The character C<#> (hash) at the beginning of a line denotes a
+comment.
 
 =head2 Makefile Style (makefile)
 
@@ -1735,7 +1795,15 @@ The module HTML::Mason can also be seen as an embedded Perl system, but
 it is a larger system with the design objective being a
 "high-performance, dynamic web site authoring system".
 
+=item [HTML::EP] Perl Module HTML::EP - a system for embedding Perl
+  into HTML, by Jochen Wiedmann.
+
+F<http://search.cpan.org/~jwied/HTML-EP-MSWin32/lib/HTML/EP.pod>
+It seems that the module was developed in 1998-99.  Provides a good
+CGI support, run-time support, session handling, a database server
+interface.
+
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.67 2007/07/19 15:54:46 vlado Exp $
+# $Id: Starfish.pm,v 3.74 2007/09/19 15:41:28 vlado Exp $
