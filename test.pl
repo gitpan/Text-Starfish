@@ -33,6 +33,7 @@ chdir 'tmp' or die;
 &testcase('01', 'replace');
 &testcase('02', 'replace');
 &testcase('03', 'replace');
+&testcase('05', 'replace');
 
 &testcase(2);
 &testcase(3);

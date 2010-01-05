@@ -90,3 +90,8 @@ Revision history for Perl extension Text::Starfish.
 	- documentation improvement
 	- debugging (minor, makefile style)
 	- debugging: a serious memory leak in scanning
+
+1.11 Tue Jan  5 07:53:26 AST 2010
+	- added a hook to tex mode to handle %<? .. !> in replace mode
+	- added a hook in TeX mode to include <? .. !>
+	- documentation updates

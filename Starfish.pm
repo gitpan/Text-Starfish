@@ -1,7 +1,7 @@
 # Starfish - Perl-based System for Text-Embedded
 #     Programming and Preprocessing
 #
-# (c) 2001-2007 Vlado Keselj http://www.cs.dal.ca/~vlado
+# (c) 2001-2010 Vlado Keselj http://www.cs.dal.ca/~vlado
 #               and contributing authors
 #
 # See the documentation following the code.  You can also use the
@@ -28,10 +28,10 @@ our @EXPORT = @{ $EXPORT_TAGS{'all'} };
 # updated here and in META.yml
 our $NAME     = 'Starfish';
 our $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-our $VERSION  = '1.10';
+our $VERSION  = '1.11';
 
 use vars qw($Revision);
-($Revision = substr(q$Revision: 3.74 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 3.77 $, 10)) =~ s/\s+$//;
 
 #use vars @EXPORT_OK;
 
@@ -742,10 +742,13 @@ sub setStyle {
 		 {begin => '<?', end => '!>', f => \&evaluate }];
 	$self->{CodePreparation} = 's/^\s*\/\/+//mg';
     }
-    elsif ($s eq 'tex') {
+    elsif ($s eq 'tex') {                          # TeX and LaTeX hooks
 	$self->{LineComment} = '%';
 	$self->{hook}=[{begin => "%+\n", end=>"\n%-\n", f=>sub{return''}},  # Reserved for output
-	       {begin => '<?', end => "!>\n", f => \&evaluate }];
+	       {begin => '%<?', end => "!>\n", f => \&evaluate },
+	       {begin => '<?', end => "!>\n", f => \&evaluate },
+	       {begin => '<?', end => "!>", f => \&evaluate }];
+
 	$self->{CodePreparation} = 's/^[ \t]*%//mg';
     }
     elsif ($s eq 'python') {
@@ -817,12 +820,8 @@ sub addHook {
 		 "return \"\$p\$_\$s\"; } };");
 	}
 	_croak("addHook error:$@") if $@;
-    } elsif ($#_ == 1) {
+    } elsif ($#_ == 1 and ref($_[0]) eq 'Regexp') {
 	my $regex=shift; my $replace = shift;
-	if (ref($regex) ne 'Regexp')
-	{ _croak("addHook: first arg not regex (TODO?): ".
-		 ref($regex).", ".ref($replace)) } 
-
 	if (ref($replace) eq '' && $replace eq 'comment')
 	{ push @Hook, {regex=>$regex, replace=>\&repl_comment} }
 	elsif (ref($replace) eq 'CODE')
@@ -1733,7 +1732,7 @@ other comments.
 
 =head1 AUTHORS
 
- 2001-2007 Vlado Keselj http://www.cs.dal.ca/~vlado
+ 2001-2008 Vlado Keselj http://www.cs.dal.ca/~vlado
            and contributing authors:
       2007 Charles Ikeson (overhaul of test.pl)
 
@@ -1806,4 +1805,4 @@ interface.
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.74 2007/09/19 15:41:28 vlado Exp $
+# $Id: Starfish.pm,v 3.77 2008/04/08 11:00:35 vlado Exp $
