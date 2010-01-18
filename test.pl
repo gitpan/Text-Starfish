@@ -34,11 +34,19 @@ chdir 'tmp' or die;
 &testcase('02', 'replace');
 &testcase('03', 'replace');
 &testcase('05', 'replace');
+&testcase('06'); # was 5
+&testcase('07'); # was 25, Makefile
+&testcase('08'); # Makefile
+
+#    # 25
+#    copy('../testfiles/25_Makefile','Makefile');
+#    `perl -I. -- starfish Makefile`;
+#    okfiles('../testfiles/25_Makefile.out', 'Makefile');
+
 
 &testcase(2);
 &testcase(3);
 &testcase(4);
-&testcase(5);
 &testcase(6, 'out');
 &testcase(7, 'replace');
 &testcase(8);
@@ -137,11 +145,6 @@ chdir 'tmp' or die;
     `perl -I. -- starfish 24.py`;
     okfiles('../testfiles/24.py.out', '24.py');
 
-    # 25
-    copy('../testfiles/25_Makefile','Makefile');
-    `perl -I. -- starfish Makefile`;
-    okfiles('../testfiles/25_Makefile.out', 'Makefile');
-
     # 26
     copy('../testfiles/26_include_example.html','26_include_example.html');
     copy('../testfiles/26_include_example1.html','26_include_example1.html');
@@ -153,7 +156,7 @@ sub okfiles {
     while (@_) {
 	my $f2 = shift;
 	if (! ok(getfile($f2), getfile($f1)) )
-	{ print STDERR "Files: $f1 and $f2\n" }
+	{ print STDERR "pwd=".`pwd`."Files: $f1 and $f2\n" }
 
     }
 }
@@ -196,6 +199,13 @@ sub testcase {
 	$outfile = "${testnum}_html.out";
         if ($#_ > -1 and $_[0] eq 'replace')
 	{  $replace = "${testnum}_out.html" }
+    }
+    elsif ( -e "../testfiles/${testnum}_Makefile.in" ) {
+	$infile = "${testnum}_Makefile.in";
+	$procfile = "Makefile";
+	$outfile = "${testnum}_Makefile.out";
+        if ($#_ > -1 and $_[0] eq 'replace')
+	{  $replace = "${testnum}_Makefile.out" }
     }
     elsif ( -e "../testfiles/${testnum}_tex.in" ) {
 	my $ext = $1;

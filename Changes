@@ -95,3 +95,10 @@ Revision history for Perl extension Text::Starfish.
 	- added a hook to tex mode to handle %<? .. !> in replace mode
 	- added a hook in TeX mode to include <? .. !>
 	- documentation updates
+
+1.12  Mon Jan 18 09:58:35 AST 2010
+	- added 'echo' evaluation
+	- improvement (filename not necessarily first in loadinclude)
+	- add_hook introduced to replace addHook; including hook type
+	- debugging: makefile and python style
+	- removing `our' to fix testing problems

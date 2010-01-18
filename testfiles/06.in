@@ -25,5 +25,14 @@ Document 1
 
 % somerandomdelimiter echo "let's see what happens" ending
 
+% Testing ignore and echo:
+<?
+  $Star->addHook('ignorethis', 'end', 'ignore');
+  $Star->addHook('echothis', 'end', 'echo');
+!>
+
+ignorethis ignored end
+echothis echo this end
+
 Now, ignore the rest: < ? $Star->addHook('','','ignore') !>
 the rest...

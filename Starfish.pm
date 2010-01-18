@@ -12,26 +12,38 @@ use strict;
 use POSIX;
 use Carp;
 use Cwd qw(cwd);
+
 use Exporter;
-
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
-our @ISA = qw(Exporter);
 
-our %EXPORT_TAGS = ( 'all' => [qw(
+#our @ISA = qw(Exporter);
+# our %EXPORT_TAGS = ( 'all' => [qw(
+#   appendfile echo file_modification_date 
+#   file_modification_time getfile getmakefilelist get_verbatim_file
+#   getinclude include
+#   last_update putfile read_records read_starfish_conf starfish_cmd ) ] );
+# our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
+# our @EXPORT = @{ $EXPORT_TAGS{'all'} };
+@ISA = qw(Exporter);
+%EXPORT_TAGS = ( 'all' => [qw(
   appendfile echo file_modification_date 
   file_modification_time getfile getmakefilelist get_verbatim_file
   getinclude include
   last_update putfile read_records read_starfish_conf starfish_cmd ) ] );
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-our @EXPORT = @{ $EXPORT_TAGS{'all'} };
+@EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
+@EXPORT = @{ $EXPORT_TAGS{'all'} };
 
 # updated here and in META.yml
-our $NAME     = 'Starfish';
-our $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-our $VERSION  = '1.11';
+# our $NAME     = 'Starfish';
+# our $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
+# our $VERSION  = '1.12';
+use vars qw($NAME $ABSTRACT $VERSION);
+$NAME     = 'Starfish';
+$ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
+$VERSION  = '1.12';
 
 use vars qw($Revision);
-($Revision = substr(q$Revision: 3.77 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 111 $, 10)) =~ s/\s+$//;
 
 #use vars @EXPORT_OK;
 
@@ -61,7 +73,7 @@ sub new($@) {
     }
 
     if ($copyhooks) {
-	_croak("new: cannot cophooks if Star is not there") unless
+	_croak("new: cannot copyhooks if Star is not there") unless
 	    ref($::Star) eq 'Text::Starfish';
 	$self->{Style}           = $::Star->{Style};
 	$self->{CodePreparation} = $::Star->{CodePreparation};
@@ -103,7 +115,7 @@ sub getinclude($@) {
 }
 
 sub loadinclude($@) {
-    my $infile = shift;
+    my $infile = '';
     my @args = ();
     my $replace = 1;
     my $require = '';
@@ -111,6 +123,7 @@ sub loadinclude($@) {
 	if    (/^-replace$/)   { $replace = 1 }
 	elsif (/^-noreplace$/) { $replace = '' }
 	elsif (/^-require$/)   { $require = 1 }
+	elsif (!/^-/ && $infile eq '') { $infile = $_ }
 	else  { push @args, $_ }
     }
 
@@ -214,6 +227,22 @@ sub process_files {
 
 }				# end of method process_files
 
+# eval_dispatch should see how to properly call the evaluator, or replacement
+# eventually it should also be used for string-based evaluators
+sub eval_dispatch {
+    my $self = shift;
+    my $hook = $self->{hook}->[$self->{ttype}];
+    if ($hook->{ht} eq 'regex') {
+	local $::Star = $self;
+	my $c = $self->{args}->[0];
+	my $r = &{$self->{hook}->[$self->{ttype}]->{replace}}( $self, @{ $self->{args} } );
+	return $r if $self->{REPLACE};
+	return $c if $r eq '';
+	return $c.$self->{hook}->[0]->{'begin'}.$r.$self->{hook}->[0]->{'end'};
+    }
+    die;
+}
+
 sub digest {
     my $self = shift;
     $self->{CurrentLoop} = 1;
@@ -223,14 +252,22 @@ sub digest {
     $self->{Out} = '';
     $self->scan();
     while ($self->{ttype} != -1) {
-	if ($self->{ttype} > -1 && @{$self->{args}}) { # call evaluator
-	    $self->{Out}.= &{$self->{hook}->[$self->{ttype}]->{replace}}
-	    ( $self, @{ $self->{args} } );
-	}
-	elsif ($self->{ttype} > -1 ) {                 # call evaluator
-	    $self->{Out}.= &{$self->{hook}->[$self->{ttype}]->{f}}
-	    ( $self, $self->{prefix}, $self->{currenttoken}, $self->{suffix});
-	}
+	if ($self->{ttype} > -1) {
+	    my $hook = $self->{hook}->[$self->{ttype}];
+	    if ($hook->{ht} eq 'regex') {
+		$self->{Out} .= $self->eval_dispatch;
+	    }
+	    # old style regex evaluatior, should be removed, but first
+	    # fix problems with python style
+	    elsif ( @{$self->{args}} ) {
+		$self->{Out}.= &{$self->{hook}->[$self->{ttype}]->{replace}}
+		( $self, @{ $self->{args} } );
+	    }
+	    else {
+		$self->{Out}.= &{$self->{hook}->[$self->{ttype}]->{f}}
+		( $self, $self->{prefix}, $self->{currenttoken}, $self->{suffix});
+	    }
+	} # else $ttype < -1
 	else { $self->{Out}.=$self->{currenttoken} }
 	$self->scan();
     }
@@ -299,7 +336,7 @@ sub scan {
 		$i1 = $j; $pl = $pl2; $i2 = $j2; $sl = $sl2;
 		$self->{ttype} = $ttype;
 		$self->{args}  = [];
-	    } else {
+	    } else {		# matching regex hook
 		my @args = ($self->{data} =~ /$self->{hook}->[$ttype]->{regex}/m);
 		next unless @args;
 		my $j = length($`);
@@ -335,10 +372,9 @@ sub scan {
     return $self->{ttype};
 }
 
-# eval wrapper
+# eval wrapper for string code
 sub eval1 {
     my $self = shift;
-
     my $code = shift; $code = '' unless defined $code;
     my $comment = shift;
     eval("package main; no strict; $code");
@@ -350,9 +386,7 @@ sub eval1 {
     }
 }
 
-########################################################################
-# The main subroutine for evauating a snippet
-#
+# The main subroutine for evaluating a snippet of string
 sub evaluate {
     my $self = shift;
 
@@ -408,11 +442,6 @@ sub evaluate_py {
     return "$pref$c$suf";
 }
 
-#!!!
-#old:{regex => qr/([ \t]*)# *<\?(.*?)!>\n(#+\n.*?\n#-\n)?/, replace=>\&evaluate_py1},
-#    my $re_py1 = qr/([\ \t]*)\#(\ *<\?)([\000-\377]*?)!>\n
-#	            ([\ \t]*\#+\n[\000-\377]*?\n[\ \t]*\#-\n)?/x;
-#
 # Python-specific evaluator (used also for makefile style)
 sub evaluate_py1 {
     my $self = shift;
@@ -439,7 +468,21 @@ sub evaluate_py1 {
     { return "$indent#$prefix$c!>\n$indent#+\n".$::O."\n$indent#-\n" }
 }
 
-# a predefined evaluator
+# predefined evaluator: echo
+sub eval_echo {
+    my $self = shift;
+    my $pref = shift;
+    my $cont = shift;
+    my $suff = shift;
+    $::O = $cont;
+
+    return $::O if $self->{REPLACE};
+    return $pref.$cont.$suff if $::O eq '';
+    $suff.="$self->{hook}->[0]->{'begin'}$::O$self->{hook}->[0]->{'end'}";
+    return $pref.$cont.$suff;
+}
+
+# predefined evaluator: ignore
 sub eval_ignore {
     my $self = shift;
     return '' if $self->{REPLACE};
@@ -725,8 +768,9 @@ sub setStyle {
     $self->{CodePreparation} = 's/\\n(?:#|%|\/\/+)/\\n/g';
 
     # Used for Python and Makefile with &evaluate_py1
-    my $re_py1 = qr/([\ \t]*)\#(\ *<\?)([\000-\377]*?)!>\n
-	            ([\ \t]*\#+\n[\000-\377]*?\n[\ \t]*\#-\n)?/x;
+    my $re_py1 = qr/([\ \t]*)\#(\ *<\?)([\000-\377]*?)!>\n/x;
+    # extension below was a bug for <?...!>...<?...!>#+...#-
+    # ([\ \t]*\#+\n[\000-\377]*?\n[\ \t]*\#-\n)?/x;
 
     if ($s eq 'perl') { }
     elsif ($s eq 'makefile') {
@@ -789,6 +833,26 @@ sub setStyle {
     $self->{Style} = $s;
 }
 
+sub add_hook {
+    my $self = shift; my $ht = shift;
+    my $hooks = $self->{hook}; my $hook = { ht=>$ht };
+    if ($ht eq 'regex') {
+	my $regex=shift; my $replace = shift;
+	$hook->{regex} = $regex;
+	if (ref($replace) eq '' && $replace eq 'comment')
+	{ $hook->{replace} = \&repl_comment }
+	elsif (ref($replace) eq 'CODE')
+	{ $hook->{replace} = $replace }
+	else { _croak("add_hook, undefined regex format input ".
+	              "(TODO?): ".ref($regex).", ".ref($replace)
+		   ) }
+	push @{$hooks}, $hook;
+	
+    } else { _croak("add_hook error, unknown hook type `$ht'") }
+}
+
+# addHook is deprecated.  Use add_hook, which contains the hook type
+# as the second argument, after $self.
 sub addHook {
     my $self = shift;
     my @Hook = @{ $self->{hook} };
@@ -799,6 +863,8 @@ sub addHook {
 	{ push @Hook, {begin=>$p, end=>$s, f=>\&evaluate} }
 	elsif ($fun eq 'ignore')
 	{ push @Hook, {begin=>$p, end=>$s, f=>\&eval_ignore} }
+	elsif ($fun eq 'echo')
+	{ push @Hook, {begin=>$p, end=>$s, f=>\&eval_echo} }
 	elsif (ref($fun) eq 'CODE') {
 	    push @Hook, {begin=>$p, end=>$s,
 			 f=> sub { local $_; my $self=shift;
@@ -820,7 +886,7 @@ sub addHook {
 		 "return \"\$p\$_\$s\"; } };");
 	}
 	_croak("addHook error:$@") if $@;
-    } elsif ($#_ == 1 and ref($_[0]) eq 'Regexp') {
+    } elsif ($#_ == 1 and ref($_[0]) eq 'Regexp') { #regex hook
 	my $regex=shift; my $replace = shift;
 	if (ref($replace) eq '' && $replace eq 'comment')
 	{ push @Hook, {regex=>$regex, replace=>\&repl_comment} }
@@ -1413,7 +1479,14 @@ C<-copyhooks> Copies hooks from the Star object (C<$::Star>).  This
     C<LineComment>, and per-component copies the array C<hook>.
 
 
+=head2 $o->add_hook($ht,...)
+
+Adds a new hook.  The first argument is the hook type.
+
 =head2 $o->addHook
+
+This method is deprecated.  It will be gradually replaced with
+add_hook, which is better defined since it includes hook type.
 
 Adds a new hook.  The method can take two or three parameters:
 
@@ -1436,9 +1509,10 @@ input.  The evaluator can be provided in the following ways:
 
 in which case the default Starfish evaluator is used,
 
-=item special string 'ignore'
+=item special strings 'ignore' and 'echo'
 
-equivalent to producing no echo,
+'ignore' ignores the hook and produces no echo, 'echo' simply echos
+    the contests between the delimiters.
 
 =item other strings
 
@@ -1455,10 +1529,13 @@ $_ provides the captured string.  Three arguments are also provided to
 the code: $p - the prefix, $_, and $s - the suffix.
 The result is the value of $_.
 
+=back
+
 For the format with two parameters, C<($regex, $replacement)>,
-currently addHook understands only replacement 'comment', which will
+currently in this mode addHook understands replacement 'comment' and
+code reference (e.g., sub { ... }).  The replacement 'comment' will
 repeat the token in the non-replace mode, and remove it in the replace
-mode; e.i., equivalent to no echo.  The regular expression is mathched in
+mode; e.i., equivalent to no echo.  The regular expression is matched in
 the multi-line mode, so ^ and $ can be used to match beginning and
 ending of a line.  (Caveat: Due to the way how scanner works,
 beginning of a line starts after the end of previously matched token.)
@@ -1466,8 +1543,6 @@ beginning of a line starts after the end of previously matched token.)
 Example:
 
  $Star->addHook(qr/^#.*\n/, 'comment');
-
-=back
 
 =head2 $o->last_update() 
 
@@ -1523,8 +1598,8 @@ exist.  It is similar to the PHP function require.  A special function
 named require is not used since C<require> is a Perl reserved word.
 Another interesting option is C<-copyhooks>, for using hooks and some
 other relevant properties from the Star object (C<$::Star>).  This
-option is eventually passed to C<new>, so see the constructor new for
-more details.
+option is eventually passed to C<new>, so you can see the constructor
+new for more details.
 
 The code for get include is the following:
 
@@ -1732,7 +1807,7 @@ other comments.
 
 =head1 AUTHORS
 
- 2001-2008 Vlado Keselj http://www.cs.dal.ca/~vlado
+ 2001-2010 Vlado Keselj http://www.cs.dal.ca/~vlado
            and contributing authors:
       2007 Charles Ikeson (overhaul of test.pl)
 
@@ -1805,4 +1880,4 @@ interface.
 =back
 
 =cut
-# $Id: Starfish.pm,v 3.77 2008/04/08 11:00:35 vlado Exp $
+# $Id: Starfish.pm 111 2010-01-18 13:58:49Z vlado $

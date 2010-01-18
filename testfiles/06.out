@@ -28,5 +28,17 @@ let's see what happens
 %-
 
 
+% Testing ignore and echo:
+<?
+  $Star->addHook('ignorethis', 'end', 'ignore');
+  $Star->addHook('echothis', 'end', 'echo');
+!>
+
+ignorethis ignored end
+echothis echo this end%+
+ echo this 
+%-
+
+
 Now, ignore the rest: < ? $Star->addHook('','','ignore') !>
 the rest...
