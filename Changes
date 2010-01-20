@@ -102,3 +102,6 @@ Revision history for Perl extension Text::Starfish.
 	- add_hook introduced to replace addHook; including hook type
 	- debugging: makefile and python style
 	- removing `our' to fix testing problems
+
+1.13  Wed Jan 20 13:36:32 AST 2010
+	- fixing testing problems: perl should be invoked with $^X
