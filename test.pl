@@ -23,11 +23,11 @@ mkdir 'tmp', 0700 unless -d 'tmp';
 mkdir 'tmp/Text', 0700 unless -d 'tmp/Text';
 copy('Starfish.pm','tmp/Text/Starfish.pm');
 
-#{
-#    my $f = getfile('starfish');
-#    $f =~ s<^#!/usr/bin/perl>{#!/usr/bin/perl -I../blib/lib} or die;
-#    putfile('tmp/starfish', $f);
-#}
+{
+    my $f = getfile('starfish');
+    $f =~ s<^#!/usr/bin/perl>{#!/usr/bin/perl -I../blib/lib} or die;
+    putfile('tmp/starfish', $f);
+}
 
 chdir 'tmp' or die;
 &testcase('01', 'replace');

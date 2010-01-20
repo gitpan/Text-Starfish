@@ -34,16 +34,13 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
 @EXPORT = @{ $EXPORT_TAGS{'all'} };
 
 # updated here and in META.yml
-# our $NAME     = 'Starfish';
-# our $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-# our $VERSION  = '1.12';
 use vars qw($NAME $ABSTRACT $VERSION);
 $NAME     = 'Starfish';
 $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-$VERSION  = '1.13';
+$VERSION  = '1.14';
 
 use vars qw($Revision);
-($Revision = substr(q$Revision: 113 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 116 $, 10)) =~ s/\s+$//;
 
 #use vars @EXPORT_OK;
 
@@ -1880,4 +1877,4 @@ interface.
 =back
 
 =cut
-# $Id: Starfish.pm 113 2010-01-18 14:04:04Z vlado $
+# $Id: Starfish.pm 116 2010-01-20 17:39:25Z vlado $
