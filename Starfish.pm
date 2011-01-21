@@ -29,10 +29,10 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
 use vars qw($NAME $ABSTRACT $VERSION);
 $NAME     = 'Starfish';
 $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-$VERSION  = '1.15';
+$VERSION  = '1.16';
 
 use vars qw($Revision);
-($Revision = substr(q$Revision: 304 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 305 $, 10)) =~ s/\s+$//;
 
 # non-exported package globals
 use vars qw($GlobalREPLACE);
@@ -1856,7 +1856,9 @@ code is basically:
 
     return "\\begin{verbatim}\n".
 	   untabify(scalar(getfile($f))).
-	   "\\end{verbatim}\n";
+	   "\\ end{verbatim}\n";
+
+Note: There is no space betwen C<\\> and C<end{verbatim}>.
 
 =head1 LIMITATIONS AND BUGS
 
@@ -1938,4 +1940,4 @@ interface.
 =back
 
 =cut
-# $Id: Starfish.pm 304 2011-01-21 11:38:28Z vlado $
+# $Id: Starfish.pm 305 2011-01-21 12:17:29Z vlado $
