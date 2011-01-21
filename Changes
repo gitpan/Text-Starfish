@@ -108,3 +108,8 @@ Revision history for Perl extension Text::Starfish.
 
 1.14  Wed Jan 20 13:41:09 AST 2010
 	- fixing another testing problem
+
+1.15
+	- documentation improvements
+	- new function: current_year
+	- code improvements

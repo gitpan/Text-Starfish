@@ -37,11 +37,11 @@ chdir 'tmp' or die;
 &testcase('06'); # was 5
 &testcase('07'); # was 25, Makefile
 &testcase('08'); # Makefile
+&testcase('09', 'replace'); # old 7, html
 &testcase(2);
 &testcase(3);
 &testcase(4);
 &testcase(6, 'out');
-&testcase(7, 'replace');
 &testcase(8);
 &testcase(9, 'out');
 # 10

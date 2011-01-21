@@ -1,6 +1,6 @@
 use ExtUtils::MakeMaker;
 
-# $Id: Makefile.PL,v 3.13 2007/07/19 15:58:01 vlado Exp $
+# $Id: Makefile.PL 294 2011-01-20 16:16:28Z vlado $
 
 WriteMakefile(
     'NAME'		=> 'Text::Starfish',

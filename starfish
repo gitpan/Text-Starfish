@@ -1,7 +1,7 @@
 #!/usr/bin/perl
-# (c) 2001-2010 Vlado Keselj http://www.cs.dal.ca/~vlado
+# (c) 2001-2011 Vlado Keselj http://www.cs.dal.ca/~vlado
 #
-# $Id: starfish 54 2010-01-05 11:31:15Z vlado $
+# $Id: starfish 293 2011-01-20 16:15:32Z vlado $
 #
 # starfish - a script for using Starfish.pm
 #

@@ -1,7 +1,7 @@
 # Starfish - Perl-based System for Text-Embedded
 #     Programming and Preprocessing
 #
-# (c) 2001-2010 Vlado Keselj http://www.cs.dal.ca/~vlado
+# (c) 2001-2011 Vlado Keselj http://web.cs.dal.ca/~vlado
 #               and contributing authors
 #
 # See the documentation following the code.  You can also use the
@@ -16,14 +16,6 @@ use Cwd qw(cwd);
 use Exporter;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
 
-#our @ISA = qw(Exporter);
-# our %EXPORT_TAGS = ( 'all' => [qw(
-#   appendfile echo file_modification_date 
-#   file_modification_time getfile getmakefilelist get_verbatim_file
-#   getinclude include
-#   last_update putfile read_records read_starfish_conf starfish_cmd ) ] );
-# our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-# our @EXPORT = @{ $EXPORT_TAGS{'all'} };
 @ISA = qw(Exporter);
 %EXPORT_TAGS = ( 'all' => [qw(
   appendfile echo file_modification_date 
@@ -37,12 +29,10 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
 use vars qw($NAME $ABSTRACT $VERSION);
 $NAME     = 'Starfish';
 $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-$VERSION  = '1.14';
+$VERSION  = '1.15';
 
 use vars qw($Revision);
-($Revision = substr(q$Revision: 116 $, 10)) =~ s/\s+$//;
-
-#use vars @EXPORT_OK;
+($Revision = substr(q$Revision: 304 $, 10)) =~ s/\s+$//;
 
 # non-exported package globals
 use vars qw($GlobalREPLACE);
@@ -841,8 +831,8 @@ sub add_hook {
 	elsif (ref($replace) eq 'CODE')
 	{ $hook->{replace} = $replace }
 	else { _croak("add_hook, undefined regex format input ".
-	              "(TODO?): ".ref($regex).", ".ref($replace)
-		   ) }
+	              "(TODO?): ref regex(".ref($regex).
+		      "), ref replace(".ref($replace).")" ) }
 	push @{$hooks}, $hook;
 	
     } else { _croak("add_hook error, unknown hook type `$ht'") }
@@ -1084,6 +1074,8 @@ sub read_records($ ) {
   }
   return wantarray ? @{$db} : $db;
 }
+
+sub current_year { return POSIX::strftime("%Y", localtime(time)) }
 
 sub last_update() {
     my $self = @_ ? shift : $::Star;
@@ -1438,6 +1430,20 @@ questionable decision.
 
 Name of the current input file.
 
+=head2 $Star->{Loops}
+
+Controls the number of iterations.  The default value is 1, but we may
+want to repeat starfishing the text several times, or even until a
+fix-point is reached.  One example of use is the following:
+
+    $template = getfile('templates/main-template.html');
+    $Star->{Loops} = 2 if $Star->{Loops}<2;
+
+Explanation; The templated that is used for a web page may contain
+starfish code.  We need to set the the number of iterations to at
+least 2 to have this code executed, since the first iteration is used
+only to set up the template.
+
 =head2 $Star->{Out}
 
 Output content of the current processing unit.  For example, to use
@@ -1445,6 +1451,10 @@ Output content of the current processing unit.  For example, to use
 final substitution in an HTML file:
 
  <!--<? $Star->{Out} =~ s/^#.*\n//mg; !>-->
+
+It is important to have in mind that the contents of this variable is
+the output processed so far, so any final output processing should be
+done in a snippet where no new output is produced.
 
 =head2 $Star->{OUTFILE}
 
@@ -1478,7 +1488,34 @@ C<-copyhooks> Copies hooks from the Star object (C<$::Star>).  This
 
 =head2 $o->add_hook($ht,...)
 
-Adds a new hook.  The first argument is the hook type.
+Adds a new hook.  The first argument is the hook type, which is a
+string.  The following is the list of hook types with descriptions:
+
+=over 5
+
+=item regex, I<regex>, I<replace>
+
+The hook type C<regex> is followed by a regular expression and a
+replace argument.  Whenever a regular expression is matched in text,
+it is ``starfished'' according to the argument replace.  If the
+argument replace is the string ``C<comment>'', it is treated as the
+comment.  If the argument replace is code, it is used as the
+evaluation code.  For example, the following source in an HTML file:
+
+  <!--<? $Star->add_hook('regex', qr/^.section:(\w+)\s+(.*)/,
+  sub { $_="<a name\"$_[2]\"><h3>$_[3]</h3</a>" }) !>-->
+
+  line before
+  .section:overview Document Overview
+  line after
+
+will produce the following output, in the replace mode:
+
+  line before
+  <a name"overview"><h3>Document Overview</h3</a>
+  line after
+
+=back
 
 =head2 $o->addHook
 
@@ -1577,12 +1614,12 @@ will be the Perl style.
 
 =head1 PREDEFINED FUNCTIONS
 
-=head2 include( I<filename and options> )
+=head2 include( I<filename and options> ) -- starfish a file and echo
 
 Reads, starfishes the file specified by file name, and echos the
 contents.  Similar to PHP include.  Uses getinclude function.
 
-=head2 getinclude( I<filename and options> )
+=head2 getinclude( I<filename and options> ) -- starfish a file and return
 
 Reads, starfishes the file specified by file name, and returns the
 contents (see also include to echo the content implicitly).
@@ -1611,7 +1648,7 @@ directly.  The function C<loadinclude> creates a Starfish object, and
 reads the file, however it is not digested yet, so one can modify the
 object before this.
 
-=head2 loadinclude( I<filename and options> )
+=head2 loadinclude( I<filename and options> ) -- load file and get ready to digest
 
 The first argument is a filename.  Loadinclude will interpret the
 options C<-replace>, C<-noreplace>, and C<-require>.  A Starfish
@@ -1627,6 +1664,17 @@ mode.  The default mode is replace and that is usually the mode that
 is needed in includes.  The option C<-require> will cause program to
 croak if the file does not exist.  An interesting option is
 C<-copyhooks>, which is documented in the C<new> method.
+
+=head2 read_starfish_conf
+
+This function is usually called at the begining of a starfish file, in
+order to read local configuration.  it tests whethere there exists a
+filed named C<starfish.conf> in the current directory.  If it does
+exist, it checks for the same file in the parent directory, then
+gran-parent directory, etc.  Once the process stops, is starts
+executing the configuration files in the order from first ancestor
+down.  For each file, it changes directory to the corresponding
+directory, and requires (in Perl style) the file in the package main.
 
 =head2 starfish_cmd I<list of file names and options>
 
@@ -1678,11 +1726,17 @@ Those were the options.
 
 appends list elements to the file.
 
+=head2 echo I<string>
+
+appends string to the special variable $).
+
+=head2 DATE AND TIME RELATED FUNCTIONS
+
+=head3 current_year
+
+returns the current year in string format.
+
 =over 4
-
-=item B<echo>
-
-appends stuff to the special variable $O.
 
 =item B<file_modification_time>
 
@@ -1791,6 +1845,19 @@ For example, in the following expansion:
 
 it is convenient to have the embedded output indented in the same way as the embedded code.
 
+=head1 STYLE SPECIFIC PREDEFINED FUNCTIONS
+
+=head2 get_verbatim_file( I<filename> )
+
+Specific to LaTeX mode.  Reads textual file I<filename> and returns a
+string ready for inclusion in a LaTeX document.  It untabifies the
+file contests for proper representation of whitespace.  The function
+code is basically:
+
+    return "\\begin{verbatim}\n".
+	   untabify(scalar(getfile($f))).
+	   "\\end{verbatim}\n";
+
 =head1 LIMITATIONS AND BUGS
 
 The script swallows the whole input file at once, so it may not work
@@ -1804,7 +1871,7 @@ other comments.
 
 =head1 AUTHORS
 
- 2001-2010 Vlado Keselj http://www.cs.dal.ca/~vlado
+ 2001-2011 Vlado Keselj http://www.cs.dal.ca/~vlado
            and contributing authors:
       2007 Charles Ikeson (overhaul of test.pl)
 
@@ -1833,12 +1900,6 @@ This script is somewhat similar to ePerl, about which you can read at
 
 F<http://www.ossp.org/pkg/tool/eperl/>.  It was developed by Ralf
 S. Engelshall in the period from 1996 to 1998.
-
-=item Text::Template
-
-Text::Template is a module with similar functionality as Starfish.
-An interesting similarity is that the output variable in
-Text::Template is called $OUT, compared to #O in Starfish.
 
 =item php
 
@@ -1877,4 +1938,4 @@ interface.
 =back
 
 =cut
-# $Id: Starfish.pm 116 2010-01-20 17:39:25Z vlado $
+# $Id: Starfish.pm 304 2011-01-21 11:38:28Z vlado $
