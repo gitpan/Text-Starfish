@@ -1,7 +1,7 @@
 # Starfish - Perl-based System for Text-Embedded
 #     Programming and Preprocessing
 #
-# (c) 2001-2011 Vlado Keselj http://web.cs.dal.ca/~vlado
+# (c) 2001-2012 Vlado Keselj http://web.cs.dal.ca/~vlado
 #               and contributing authors
 #
 # See the documentation following the code.  You can also use the
@@ -29,10 +29,10 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS); # Exporter vars
 use vars qw($NAME $ABSTRACT $VERSION);
 $NAME     = 'Starfish';
 $ABSTRACT = 'Perl-based System for Text-Embedded Programming and Preprocessing';
-$VERSION  = '1.16';
+$VERSION  = '1.17';
 
 use vars qw($Revision);
-($Revision = substr(q$Revision: 305 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 363 $, 10)) =~ s/\s+$//;
 
 # non-exported package globals
 use vars qw($GlobalREPLACE);
@@ -244,7 +244,7 @@ sub digest {
 	    if ($hook->{ht} eq 'regex') {
 		$self->{Out} .= $self->eval_dispatch;
 	    }
-	    # old style regex evaluatior, should be removed, but first
+	    # old style regex evaluator, should be removed, but first
 	    # fix problems with python style
 	    elsif ( @{$self->{args}} ) {
 		$self->{Out}.= &{$self->{hook}->[$self->{ttype}]->{replace}}
@@ -720,9 +720,9 @@ sub setGlobStyle {
 
 sub setStyle {
     my $self = shift;
-
     if ($#_ == -1) {
-	if (defined $self->{STYLE}) { $self->setStyle($self->{STYLE}) }
+	if (defined $self->{STYLE} && $self->{STYLE} ne '')
+	{ $self->setStyle($self->{STYLE}) }
 	else {
 	    my $f = $self->{INFILE};
 
@@ -904,6 +904,8 @@ sub rmAllHooks {
     my $self = shift;
     $self->{hook} = [];
 }
+
+sub resetHooks { my $self = shift; $self->rmAllHooks(); $self->setStyle(); }
 
 sub defineMacros {
     my $self = shift;
@@ -1434,15 +1436,12 @@ Name of the current input file.
 
 Controls the number of iterations.  The default value is 1, but we may
 want to repeat starfishing the text several times, or even until a
-fix-point is reached.  One example of use is the following:
+fix-point is reached.  For example, by setting the number of Loops to
+be at least 2, as in:
 
-    $template = getfile('templates/main-template.html');
     $Star->{Loops} = 2 if $Star->{Loops}<2;
 
-Explanation; The templated that is used for a web page may contain
-starfish code.  We need to set the the number of iterations to at
-least 2 to have this code executed, since the first iteration is used
-only to set up the template.
+we require Starfish to proces the input in at least two iterations.
 
 =head2 $Star->{Out}
 
@@ -1730,21 +1729,23 @@ appends list elements to the file.
 
 appends string to the special variable $).
 
-=head2 DATE AND TIME RELATED FUNCTIONS
+=head2 DATE AND TIME FUNCTIONS
 
 =head3 current_year
 
 returns the current year in string format.
 
-=over 4
-
-=item B<file_modification_time>
+=head3 file_modification_time
 
 Returns modification time of this file (in format of Perl time).
 
-=item B<file_modification_date>
+=head3 file_modification_date
 
 Returns modification date of this file (in format: Month DD, YYYY).
+
+=head2 FILE FUNCTIONS
+
+=over 4
 
 =item B<getfile> I<file>
 
@@ -1761,20 +1762,6 @@ I<var>; e.g.,
   <? echo join "\n", getmakefilelist $Star->{INFILE}, 'FILE_LIST' !>
 
 Embedded variables are not handled.
-
-=item B<htmlquote> I<string>
-
-The following definition is taken from the CIPP project.
-
-(F<http://aspn.activestate.com/ASPN/CodeDoc/CIPP/CIPP/Manual.html>)
-
-This command quotes the content of a variable, so that it can be used
-inside a HTML option or <TEXTAREA> block without the danger of syntax
-clashes. The following conversions are done in this order:
-
-       &  =>  &amp;
-       <  =>  &lt;
-       "  =>  &quot;
 
 =item B<putfile> I<filename>, I<list>
 
@@ -1860,6 +1847,21 @@ code is basically:
 
 Note: There is no space betwen C<\\> and C<end{verbatim}>.
 
+=head2 htmlquote( I<string> )
+
+The following definition is taken from the CIPP project.
+
+(F<http://aspn.activestate.com/ASPN/CodeDoc/CIPP/CIPP/Manual.html>,
+ link does not seem to be active any more)
+
+This command quotes the content of a variable, so that it can be used
+inside a HTML option or <TEXTAREA> block without the danger of syntax
+clashes. The following conversions are done in this order:
+
+       &  =>  &amp;
+       <  =>  &lt;
+       "  =>  &quot;
+
 =head1 LIMITATIONS AND BUGS
 
 The script swallows the whole input file at once, so it may not work
@@ -1873,7 +1875,7 @@ other comments.
 
 =head1 AUTHORS
 
- 2001-2011 Vlado Keselj http://www.cs.dal.ca/~vlado
+ 2001-2012 Vlado Keselj http://www.cs.dal.ca/~vlado
            and contributing authors:
       2007 Charles Ikeson (overhaul of test.pl)
 
@@ -1940,4 +1942,4 @@ interface.
 =back
 
 =cut
-# $Id: Starfish.pm 305 2011-01-21 12:17:29Z vlado $
+# $Id: Starfish.pm 363 2012-03-21 14:58:49Z vlado $

@@ -116,3 +116,9 @@ Revision history for Perl extension Text::Starfish.
 
 1.16  Fri Jan 21 08:17:05 AST 2011
 	- documentation improvements
+
+1.17
+	- documentation improvements
+	- install procedure improvement
+        - introduced method: resetHooks
+	- created related module Text::Starfish::Perl

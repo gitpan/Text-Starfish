@@ -1,6 +1,6 @@
 use ExtUtils::MakeMaker;
 
-# $Id: Makefile.PL 294 2011-01-20 16:16:28Z vlado $
+# $Id: Makefile.PL 369 2012-07-04 12:48:26Z vlado $
 
 WriteMakefile(
     'NAME'		=> 'Text::Starfish',
@@ -17,16 +17,10 @@ WriteMakefile(
     EXE_FILES => [ 'starfish' ],
 );
 
-# private parts of Makefile
-open(M, ">>Makefile") or die;
-if ( -f 'priv.make' ) { print M getfile('priv.make') }
-close(M);
-
-sub getfile($) {
-    my $f = shift;
-    local *F;
-    open(F, "<$f") or die "getfile:cannot open $f:$!";
-    my @r = <F>;
-    close(F);
-    return wantarray ? @r : join ('', @r);
+# parts of Makefile used only in the development directory
+if (-f 'priv.make' ) {
+    open(M, ">>Makefile") or die;
+    open(I,"priv.make") or die;
+    while (<I>) { print M }
+    close(M); close(I);
 }
